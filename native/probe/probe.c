@@ -42,7 +42,8 @@ int main(int argc, char **argv) {
             if (!driver && (strstr(ln, "G2010") || strstr(d, "g2010"))) driver = d;
         }
     }
-    if (!driver) { printf("No G2010 driver found\n"); return 1; }
+    /* Gutenprint has no G2010 entry; G2010 owners use the G2000 series driver. */
+    if (!driver) driver = "bjc-G2000-series";
     const stp_printer_t *p = stp_get_printer_by_driver(driver);
     if (!p) { printf("No driver %s\n", driver); return 1; }
     printf("\n== Parameters for %s\n", driver);
