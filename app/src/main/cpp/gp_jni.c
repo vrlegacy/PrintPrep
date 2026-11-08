@@ -73,6 +73,42 @@ static stp_image_status_t im_get_row(stp_image_t *i, unsigned char *data, size_t
 
 /* ------------------------------------------------------------------ helpers */
 
+/* Fills in the driver's own default for every required setting we haven't chosen
+ * (e.g. ColorCorrection, DitherAlgorithm, Orientation). */
+static void fill_defaults(stp_vars_t *v) {
+    stp_parameter_list_t params = stp_get_parameter_list(v);
+    size_t n = stp_parameter_list_count(params);
+    for (size_t i = 0; i < n; i++) {
+        const stp_parameter_t *p = stp_parameter_list_param(params, i);
+        stp_parameter_t d;
+        stp_describe_parameter(v, p->name, &d);
+        if (d.is_active && d.is_mandatory) {
+            switch (d.p_type) {
+            case STP_PARAMETER_TYPE_STRING_LIST:
+                if (!stp_check_string_parameter(v, p->name, STP_PARAMETER_DEFAULTED) && d.deflt.str)
+                    stp_set_string_parameter(v, p->name, d.deflt.str);
+                break;
+            case STP_PARAMETER_TYPE_BOOLEAN:
+                if (!stp_check_boolean_parameter(v, p->name, STP_PARAMETER_DEFAULTED))
+                    stp_set_boolean_parameter(v, p->name, d.deflt.boolean);
+                break;
+            case STP_PARAMETER_TYPE_DOUBLE:
+                if (!stp_check_float_parameter(v, p->name, STP_PARAMETER_DEFAULTED))
+                    stp_set_float_parameter(v, p->name, d.deflt.dbl);
+                break;
+            case STP_PARAMETER_TYPE_INT:
+                if (!stp_check_int_parameter(v, p->name, STP_PARAMETER_DEFAULTED))
+                    stp_set_int_parameter(v, p->name, d.deflt.integer);
+                break;
+            default:
+                break;
+            }
+        }
+        stp_parameter_description_destroy(&d);
+    }
+    stp_parameter_list_destroy(params);
+}
+
 /* Creates driver settings from alternating key/value strings. "FullBleed" is a boolean. */
 static stp_vars_t *make_vars(JNIEnv *env, jstring jdriver, jobjectArray kv) {
     const char *driver = (*env)->GetStringUTFChars(env, jdriver, 0);
@@ -102,6 +138,7 @@ static stp_vars_t *make_vars(JNIEnv *env, jstring jdriver, jobjectArray kv) {
         (*env)->DeleteLocalRef(env, jk);
         (*env)->DeleteLocalRef(env, jv);
     }
+    fill_defaults(v);
     return v;
 }
 
