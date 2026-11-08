@@ -227,7 +227,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         val h = max(1, (sheet.paperH * k).roundToInt())
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val dpi = (k * 25.4f).roundToInt().coerceAtLeast(30)
-        SheetRenderer.drawSheet(Canvas(bmp), sheet, s, k, dpi) { item, px -> store.decode(item, px, useCache = true) }
+        SheetRenderer.drawSheet(Canvas(bmp), sheet, s, k, dpi, loader = { item, px -> store.decode(item, px, useCache = true) })
         return bmp
     }
 
