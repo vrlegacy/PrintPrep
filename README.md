@@ -23,7 +23,7 @@ exactly what will print in Phase 2 (same drawing code).
 | Paper & quality | A4 or 4×6; plain / glossy / matte / other photo; Ink saver → Best photo (stored for Phase 2) |
 | Colour | Colour, grayscale, black-ink-only, B&W document; brightness and contrast |
 | Pages | All / odd / even / custom range (`1-5, 8, 11-13`); copies 1–99; collate; manual two-sided (long / short edge) with the pass-1 / pass-2 order shown |
-| Output | **Save as PDF** (Downloads/PrintPrep): photos keep their **original quality**. JPEGs are embedded byte-for-byte; other formats and colour-adjusted photos at full resolution, lossless. Imported PDF pages are rendered at about 400 DPI; **Save as images** (Pictures/PrintPrep, JPEG or PNG, 150 or 300 DPI, one per page); Share / Open the result |
+| Output | **Save as PDF** (Downloads/PrintPrep): photos keep their **original quality**. JPEGs are embedded byte-for-byte; other formats and colour-adjusted photos at full resolution, lossless. Imported PDF pages are rendered at about 400 DPI; **Save as images** (Pictures/PrintPrep, one per page, 150 or 300 DPI). Format is **Auto** by default, matching what you added (JPEG photos → JPEG, PNG/screenshots/documents → PNG, WebP → WebP), or pick JPEG / PNG / WebP; Share / Open the result |
 
 ## Code map
 
@@ -56,7 +56,8 @@ Tick each on the vivo T5x:
 - [ ] Two-sided with 5 pages and with 6 pages: pass 1 / pass 2 / "keep sheet aside" text is correct
 - [ ] Grayscale, black-only and B&W document previews look right, and match the saved file
 - [ ] 40 photos at 32 per sheet → Save as PDF: no crash, done in under 20 s
-- [ ] Save as images at 150 and 300 DPI, JPEG and PNG: files open in Gallery
+- [ ] Share WebP images (e.g. WhatsApp stickers) → they open, print and save; transparent areas come out white
+- [ ] Save as images: Auto picks JPEG for camera photos, PNG for screenshots/PDF pages, WebP for WebP; 150 and 300 DPI files open in Gallery
 - [ ] Rotate the phone, dark mode, back button, and kill-and-reopen the app: nothing breaks
       (the job itself isn't saved between app restarts yet; that comes in Phase 4)
 

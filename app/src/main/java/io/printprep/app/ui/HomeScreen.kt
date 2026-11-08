@@ -72,7 +72,7 @@ fun HomeScreen(vm: JobViewModel) {
                 modifier = Modifier.fillMaxWidth().height(56.dp),
             ) { Text("Pick photos") }
             FilledTonalButton(
-                onClick = { files.launch(arrayOf("application/pdf", "image/*")) },
+                onClick = { files.launch(arrayOf("application/pdf", "image/*", "image/webp")) },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
             ) { Text("Pick PDFs or files") }
             FilledTonalButton(onClick = { askUrl = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {

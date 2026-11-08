@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.printprep.app.JobViewModel
 import io.printprep.app.data.ExportResult
+import io.printprep.app.data.ImageFormat
 import io.printprep.app.engine.PrintPlan
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,7 +38,8 @@ import io.printprep.app.engine.PrintPlan
 fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onPrint: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var dpi by remember { mutableIntStateOf(300) }
-    var png by remember { mutableStateOf(false) }
+    var format by remember { mutableStateOf<ImageFormat?>(null) } // null = Auto
+    val auto = remember(vm.items.toList()) { vm.autoImageFormat() }
     val s = vm.settings
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -66,8 +68,11 @@ fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onPrint: () -> Unit, onDismis
             Hint("JPEG photos are placed in the PDF unchanged. Other formats and colour-adjusted photos are kept at full resolution without lossy compression.")
             HorizontalDivider()
             ChoiceChips("Image resolution", listOf(150, 300), dpi, { "$it DPI" }) { dpi = it }
-            ChoiceChips("Image format", listOf(false, true), png, { if (it) "PNG" else "JPEG" }) { png = it }
-            OutlinedButton(onClick = { vm.exportImages(dpi, png) }, enabled = !vm.exporting, modifier = Modifier.fillMaxWidth()) {
+            ChoiceChips<ImageFormat?>("Image format", listOf(null, ImageFormat.JPEG, ImageFormat.PNG, ImageFormat.WEBP), format, {
+                it?.label ?: "Auto (${auto.label})"
+            }) { format = it }
+            Hint("Auto matches what you added: JPEG for camera photos, PNG for screenshots and documents, WebP for WebP images.")
+            OutlinedButton(onClick = { vm.exportImages(dpi, format) }, enabled = !vm.exporting, modifier = Modifier.fillMaxWidth()) {
                 Text("Save as images (one per page)")
             }
 

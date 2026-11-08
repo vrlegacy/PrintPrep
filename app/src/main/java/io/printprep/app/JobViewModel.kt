@@ -233,8 +233,14 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportPdf() = export("PDF") { plan, name, progress -> exporter.savePdf(plan, settings, name, progress) }
 
-    fun exportImages(dpi: Int, png: Boolean) =
-        export("images") { plan, name, progress -> exporter.saveImages(plan, settings, name, dpi, png, progress) }
+    /** Format chosen automatically from the added media (see [ImageFormat.auto]). */
+    fun autoImageFormat(): io.printprep.app.data.ImageFormat = io.printprep.app.data.ImageFormat.auto(items.toList())
+
+    /** [format] null = automatic. */
+    fun exportImages(dpi: Int, format: io.printprep.app.data.ImageFormat? = null) {
+        val f = format ?: autoImageFormat()
+        export("images") { plan, name, progress -> exporter.saveImages(plan, settings, name, dpi, f, progress) }
+    }
 
     private fun export(what: String, job: suspend (PrintPlan, String, (Int, Int) -> Unit) -> ExportResult) {
         if (exporting) return

@@ -168,11 +168,11 @@ class Exporter(private val context: Context, private val store: ImageStore) {
         s: PrintSettings,
         baseName: String,
         dpi: Int,
-        png: Boolean,
+        format: ImageFormat,
         onProgress: (Int, Int) -> Unit,
     ): ExportResult = withContext(Dispatchers.IO) {
-        val mime = if (png) "image/png" else "image/jpeg"
-        val ext = if (png) "png" else "jpg"
+        val mime = format.mime
+        val ext = format.ext
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val uris = plan.sheets.mapIndexed { i, sheet ->
             val k = dpi / 25.4f
@@ -182,7 +182,7 @@ class Exporter(private val context: Context, private val store: ImageStore) {
                 val name = "%s_%02d.%s".format(baseName, i + 1, ext)
                 val uri = create(name, mime, collection, Environment.DIRECTORY_PICTURES)
                 context.contentResolver.openOutputStream(uri)?.use {
-                    bmp.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 92, it)
+                    bmp.compress(format.compress, 92, it)
                 } ?: throw IOException("Cannot write $name")
                 finish(uri)
                 onProgress(i + 1, plan.sheets.size)
@@ -191,7 +191,7 @@ class Exporter(private val context: Context, private val store: ImageStore) {
                 bmp.recycle()
             }
         }
-        ExportResult(uris, mime, "Saved ${uris.size} image(s) to Pictures/PrintPrep at $dpi DPI.")
+        ExportResult(uris, mime, "Saved ${uris.size} ${format.label} image(s) to Pictures/PrintPrep at $dpi DPI.")
     }
 
     private fun create(displayName: String, mime: String, collection: Uri, rootDir: String): Uri {

@@ -113,7 +113,7 @@ fun EditorScreen(vm: JobViewModel) {
                     IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 actions = {
-                    IconButton(onClick = { addFiles.launch(arrayOf("image/*", "application/pdf")) }) {
+                    IconButton(onClick = { addFiles.launch(arrayOf("image/*", "image/webp", "application/pdf")) }) {
                         Icon(Icons.Filled.Add, "Add photos or PDFs")
                     }
                 },
@@ -317,14 +317,14 @@ private fun QuickPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
     val canSave = plan.sheets.isNotEmpty() && !vm.exporting && !vm.importing
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(onClick = { vm.exportPdf() }, enabled = canSave, modifier = Modifier.weight(1f)) { Text("Save as PDF") }
-        Button(onClick = { vm.exportImages(300, png = false) }, enabled = canSave, modifier = Modifier.weight(1f)) { Text("Save as images") }
+        Button(onClick = { vm.exportImages(300) }, enabled = canSave, modifier = Modifier.weight(1f)) { Text("Save as images") }
     }
     vm.exportProgress?.let {
         Text(it, style = MaterialTheme.typography.bodySmall)
         LinearProgressIndicator(Modifier.fillMaxWidth())
     }
     vm.lastExport?.let { Text(it.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-    Hint("After saving, the share menu opens so you can send it straight to WhatsApp, Drive, etc.")
+    Hint("Images are saved as ${vm.autoImageFormat().label}, matching what you added. After saving, the share menu opens so you can send it straight to WhatsApp, Drive, etc.")
 }
 
 // ---------------------------------------------------------------- panels
