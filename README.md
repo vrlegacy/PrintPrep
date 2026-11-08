@@ -22,7 +22,7 @@ exactly what will print in Phase 2 (same drawing code).
 | Paper & quality | A4 or 4×6; plain / glossy / matte / other photo; Ink saver → Best photo (stored for Phase 2) |
 | Colour | Colour, grayscale, black-ink-only, B&W document; brightness and contrast |
 | Pages | All / odd / even / custom range (`1-5, 8, 11-13`); copies 1–99; collate; manual two-sided (long / short edge) with the pass-1 / pass-2 order shown |
-| Output | **Save as PDF** (Downloads/PrintPrep, 300 DPI images inside); **Save as images** (Pictures/PrintPrep, JPEG or PNG, 150 or 300 DPI, one per page); Share / Open the result |
+| Output | **Save as PDF** (Downloads/PrintPrep): photos keep their **original quality**. JPEGs are embedded byte-for-byte; other formats and colour-adjusted photos at full resolution, lossless. Imported PDF pages are rendered at about 400 DPI; **Save as images** (Pictures/PrintPrep, JPEG or PNG, 150 or 300 DPI, one per page); Share / Open the result |
 
 ## Code map
 
@@ -47,6 +47,7 @@ Tick each on the vivo T5x:
 - [ ] Share a **link from Chrome** → the page loads → *Add pages* → pages appear
 - [ ] Every layout (1–32, passport, stamp) shows the right grid; in the saved PDF the page is **A4** and photos aren't stretched
 - [ ] Fit vs fill and a manual crop look the **same** in the preview and the saved PDF
+- [ ] Original quality: one 12 MP photo, 1 per sheet → Save as PDF → zoom in fully in a PDF viewer: as sharp as the original in Gallery; PDF size about the same as the photo file
 - [ ] Page range `2-4, 6`, odd, even, copies 3 with collate on and off: the saved PDF has the right pages in the right order
 - [ ] Two-sided with 5 pages and with 6 pages: pass 1 / pass 2 / "keep sheet aside" text is correct
 - [ ] Grayscale, black-only and B&W document previews look right, and match the saved file

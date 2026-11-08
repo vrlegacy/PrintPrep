@@ -126,7 +126,7 @@ object SheetRenderer {
         return ceil(longMm / 25.4f * dpi * extra).toInt().coerceIn(64, 4000)
     }
 
-    private fun applyFilter(src: Bitmap, filter: ColorMatrixColorFilter): Bitmap {
+    fun applyFilter(src: Bitmap, filter: ColorMatrixColorFilter): Bitmap {
         val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         Canvas(out).drawBitmap(src, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = filter })
         return out

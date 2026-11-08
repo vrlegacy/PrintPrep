@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.util.LruCache
+import androidx.exifinterface.media.ExifInterface
 import io.printprep.app.model.ItemKind
 import io.printprep.app.model.JobItem
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +79,21 @@ class ImageStore(private val context: Context) {
         if (useCache) cache.put(key, bmp)
         return bmp
     }
+
+    /** Full-resolution, upright bitmap (only halved if over [maxPixels], to avoid running out of memory). */
+    fun decodeFull(item: JobItem, maxPixels: Long = 40_000_000L): Bitmap? = runCatching {
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(File(item.file))) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            var sample = 1
+            while (info.size.width.toLong() * info.size.height / (sample.toLong() * sample) > maxPixels) sample *= 2
+            decoder.setTargetSampleSize(sample)
+        }
+    }.getOrNull()
+
+    /** EXIF orientation (1–8) of an image file; 1 if unknown. */
+    fun exifOrientation(item: JobItem): Int = runCatching {
+        ExifInterface(item.file).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+    }.getOrDefault(1).let { if (it in 1..8) it else 1 }
 
     fun clear() {
         cache.evictAll()

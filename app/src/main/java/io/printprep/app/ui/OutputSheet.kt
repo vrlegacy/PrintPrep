@@ -61,8 +61,9 @@ fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onDismiss: () -> Unit) {
             plan.twoSided?.let { TwoSidedCard(it) }
 
             Button(onClick = { vm.exportPdf() }, enabled = !vm.exporting, modifier = Modifier.fillMaxWidth()) {
-                Text("Save as PDF")
+                Text("Save as PDF (original photo quality)")
             }
+            Hint("JPEG photos are placed in the PDF unchanged. Other formats and colour-adjusted photos are kept at full resolution without lossy compression.")
             HorizontalDivider()
             ChoiceChips("Image resolution", listOf(150, 300), dpi, { "$it DPI" }) { dpi = it }
             ChoiceChips("Image format", listOf(false, true), png, { if (it) "PNG" else "JPEG" }) { png = it }
