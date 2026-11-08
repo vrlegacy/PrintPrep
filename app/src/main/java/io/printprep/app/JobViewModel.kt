@@ -58,6 +58,9 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     var lastExport by mutableStateOf<ExportResult?>(null)
         private set
 
+    /** Set after a successful save; the UI opens the share sheet for it and clears it. */
+    var pendingShare by mutableStateOf<ExportResult?>(null)
+
     val exporting: Boolean get() = exportProgress != null
 
     fun plan(): PrintPlan = LayoutEngine.plan(items.toList(), settings)
@@ -137,6 +140,11 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         settings = change(settings)
     }
 
+    /** Changes colour mode; print quality follows (Ink saver for grayscale) and can still be changed after. */
+    fun setColor(c: io.printprep.app.model.ColorMode) {
+        settings = settings.withColor(c)
+    }
+
     fun updateEdit(id: Long, edit: ItemEdit) {
         val i = items.indexOfFirst { it.id == id }
         if (i >= 0) items[i] = items[i].copy(edit = edit)
@@ -194,7 +202,9 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         lastExport = null
         viewModelScope.launch {
             try {
-                lastExport = job(plan, name) { done, total -> exportProgress = "Rendering sheet $done of $total…" }
+                val result = job(plan, name) { done, total -> exportProgress = "Rendering sheet $done of $total…" }
+                lastExport = result
+                pendingShare = result
             } catch (e: Throwable) {
                 message = "Saving failed: ${e.message ?: e.javaClass.simpleName}"
             } finally {

@@ -186,9 +186,12 @@ object LayoutEngine {
         return (w * k * h * k) / (cell.width * cell.height)
     }
 
-    fun rotatedSize(item: JobItem, rotation: Int): Pair<Float, Float> =
-        if (rotation % 180 != 0) item.heightPx.toFloat() to item.widthPx.toFloat()
-        else item.widthPx.toFloat() to item.heightPx.toFloat()
+    /** Size of the (cropped) item after rotation; only the ratio matters. */
+    fun rotatedSize(item: JobItem, rotation: Int): Pair<Float, Float> {
+        val w = item.widthPx * item.edit.cropWidth
+        val h = item.heightPx * item.edit.cropHeight
+        return if (rotation % 180 != 0) h to w else w to h
+    }
 
     /** User rotation, plus 90° when auto-rotate is on and the item's shape doesn't match the cell's. */
     fun effectiveRotation(item: JobItem, cell: MmRect, s: PrintSettings): Int {

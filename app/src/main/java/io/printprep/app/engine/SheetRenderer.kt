@@ -7,6 +7,7 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import io.printprep.app.model.ColorMode
 import io.printprep.app.model.FitMode
@@ -95,9 +96,16 @@ object SheetRenderer {
         rotation: Int,
         paint: Paint,
     ) {
-        val w = bmp.width.toFloat()
-        val h = bmp.height.toFloat()
-        if (w <= 0f || h <= 0f || cell.width() <= 0f || cell.height() <= 0f) return
+        if (bmp.width <= 0 || bmp.height <= 0 || cell.width() <= 0f || cell.height() <= 0f) return
+        val src = Rect(
+            (edit.cropLeft * bmp.width).toInt().coerceIn(0, bmp.width - 1),
+            (edit.cropTop * bmp.height).toInt().coerceIn(0, bmp.height - 1),
+            0, 0,
+        )
+        src.right = (edit.cropRight * bmp.width).toInt().coerceIn(src.left + 1, bmp.width)
+        src.bottom = (edit.cropBottom * bmp.height).toInt().coerceIn(src.top + 1, bmp.height)
+        val w = src.width().toFloat()
+        val h = src.height().toFloat()
         val (rw, rh) = if (rotation % 180 != 0) h to w else w to h
         val base = when (fit) {
             FitMode.FIT -> min(cell.width() / rw, cell.height() / rh)
@@ -114,13 +122,13 @@ object SheetRenderer {
         canvas.rotate(rotation.toFloat())
         if (edit.flip) canvas.scale(-1f, 1f)
         canvas.scale(scale, scale)
-        canvas.drawBitmap(bmp, -w / 2f, -h / 2f, paint)
+        canvas.drawBitmap(bmp, src, RectF(-w / 2f, -h / 2f, w / 2f, h / 2f), paint)
         canvas.restore()
     }
 
     private fun neededPixels(p: Placement, s: PrintSettings, dpi: Int): Int {
         val longMm = max(p.cell.width, p.cell.height)
-        val extra = max(1f, p.item.edit.zoom) *
+        val extra = max(1f, p.item.edit.zoom) / min(p.item.edit.cropWidth, p.item.edit.cropHeight) *
             (if (s.fit == FitMode.FILL) 1.5f else 1f) *
             max(1f, s.scalePercent / 100f)
         return ceil(longMm / 25.4f * dpi * extra).toInt().coerceIn(64, 4000)

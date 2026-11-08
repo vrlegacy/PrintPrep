@@ -79,6 +79,13 @@ private fun App(vm: JobViewModel) {
         is Screen.EditItem -> ItemEditScreen(vm, screen.itemId)
         is Screen.Web -> WebCaptureScreen(vm, screen.url)
     }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(vm.pendingShare) {
+        vm.pendingShare?.let { result ->
+            vm.pendingShare = null
+            io.printprep.app.ui.shareExport(context, result)
+        }
+    }
     vm.message?.let { msg ->
         AlertDialog(
             onDismissRequest = { vm.message = null },

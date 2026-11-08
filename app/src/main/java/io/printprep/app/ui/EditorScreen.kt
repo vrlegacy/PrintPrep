@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -84,7 +85,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-private val TABS = listOf("Layout", "Fit", "Paper & quality", "Colour", "Pages")
+private val TABS = listOf("Quick", "Layout", "Fit", "Paper & quality", "Colour", "Pages")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,10 +138,11 @@ fun EditorScreen(vm: JobViewModel) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 when (tab) {
-                    0 -> LayoutPanel(vm, s)
-                    1 -> FitPanel(vm, s)
-                    2 -> PaperPanel(vm, s)
-                    3 -> ColourPanel(vm, s)
+                    0 -> QuickPanel(vm, s, plan)
+                    1 -> LayoutPanel(vm, s)
+                    2 -> FitPanel(vm, s)
+                    3 -> PaperPanel(vm, s)
+                    4 -> ColourPanel(vm, s)
                     else -> PagesPanel(vm, s, plan)
                 }
             }
@@ -267,6 +269,42 @@ private fun Thumb(vm: JobViewModel, item: JobItem, number: Int) {
     }
 }
 
+
+// ---------------------------------------------------------------- quick tab (default)
+
+/** The everyday settings in one place, with the two save buttons. */
+@Composable
+private fun QuickPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
+    val colorChoice = if (s.color == ColorMode.COLOR) ColorMode.COLOR else ColorMode.GRAYSCALE
+    ChoiceChips("Colour", listOf(ColorMode.COLOR, ColorMode.GRAYSCALE), colorChoice, { it.label }) { c -> vm.setColor(c) }
+    ChoiceChips("Photos / pages per sheet", Presets.all, s.layout, { it.label }) { preset ->
+        vm.update { it.copy(layout = preset, fit = if (preset is FixedSizePreset) FitMode.FILL else it.fit) }
+    }
+    ChoiceChips("Orientation", PageOrientation.entries, s.orientation, { it.label }) { o -> vm.update { it.copy(orientation = o) } }
+    ChoiceChips("Fit", FitMode.entries, s.fit, { it.label }) { f -> vm.update { it.copy(fit = f) } }
+    ChoiceChips("Margins", MarginPreset.entries, s.margin, { it.label }) { m -> vm.update { it.copy(margin = m) } }
+    if (s.margin == MarginPreset.CUSTOM) {
+        SliderRow("Custom margin", s.customMarginMm, 0f..25f, "${s.customMarginMm.roundToInt()} mm", steps = 24) { v ->
+            vm.update { it.copy(customMarginMm = v.roundToInt().toFloat()) }
+        }
+    }
+    ChoiceChips("Print quality", Quality.entries, s.quality, { it.label }) { q -> vm.update { it.copy(quality = q) } }
+    Hint("Follows colour: Standard for colour, Ink saver for grayscale. You can change it.")
+    Stepper("Copies", s.copies, 1, 99) { v -> vm.update { it.copy(copies = v) } }
+
+    val canSave = plan.sheets.isNotEmpty() && !vm.exporting && !vm.importing
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(onClick = { vm.exportPdf() }, enabled = canSave, modifier = Modifier.weight(1f)) { Text("Save as PDF") }
+        Button(onClick = { vm.exportImages(300, png = false) }, enabled = canSave, modifier = Modifier.weight(1f)) { Text("Save as images") }
+    }
+    vm.exportProgress?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall)
+        LinearProgressIndicator(Modifier.fillMaxWidth())
+    }
+    vm.lastExport?.let { Text(it.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+    Hint("After saving, the share menu opens so you can send it straight to WhatsApp, Drive, etc.")
+}
+
 // ---------------------------------------------------------------- panels
 
 @Composable
@@ -327,7 +365,7 @@ private fun PaperPanel(vm: JobViewModel, s: PrintSettings) {
 
 @Composable
 private fun ColourPanel(vm: JobViewModel, s: PrintSettings) {
-    ChoiceChips("Colour", ColorMode.entries, s.color, { it.label }) { c -> vm.update { it.copy(color = c) } }
+    ChoiceChips("Colour", ColorMode.entries, s.color, { it.label }) { c -> vm.setColor(c) }
     if (s.color == ColorMode.BLACK_ONLY) Hint("Previews in grayscale. When printing (Phase 2) only the black ink is used.")
     SliderRow("Brightness", s.brightness, -0.5f..0.5f, "${(s.brightness * 100).roundToInt()}") { v ->
         vm.update { it.copy(brightness = v) }

@@ -78,7 +78,7 @@ fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onDismiss: () -> Unit) {
             vm.lastExport?.let { result ->
                 Text(result.message, color = MaterialTheme.colorScheme.primary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { share(context, result) }) { Text("Share") }
+                    OutlinedButton(onClick = { shareExport(context, result) }) { Text("Share again") }
                     OutlinedButton(onClick = { open(context, result) }) { Text("Open") }
                 }
             }
@@ -92,7 +92,7 @@ fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onDismiss: () -> Unit) {
     }
 }
 
-private fun share(context: Context, r: ExportResult) {
+fun shareExport(context: Context, r: ExportResult) {
     val intent = if (r.uris.size == 1) {
         Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, r.uris[0])
     } else {
@@ -109,6 +109,6 @@ private fun open(context: Context, r: ExportResult) {
     try {
         context.startActivity(intent)
     } catch (_: ActivityNotFoundException) {
-        share(context, r)
+        shareExport(context, r)
     }
 }

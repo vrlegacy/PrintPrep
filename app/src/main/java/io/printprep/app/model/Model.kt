@@ -105,7 +105,7 @@ data class PrintSettings(
     val fit: FitMode = FitMode.FIT,
     val autoRotate: Boolean = true,
     val scalePercent: Int = 100,
-    val margin: MarginPreset = MarginPreset.DEFAULT,
+    val margin: MarginPreset = MarginPreset.NONE,
     val customMarginMm: Float = 5f,
     // Paper & quality
     val paper: PaperSize = PaperSize.A4,
@@ -125,11 +125,24 @@ data class PrintSettings(
     val rotateBack180: Boolean = false,
 ) {
     val marginMm: Float get() = if (margin == MarginPreset.CUSTOM) customMarginMm else margin.mm
+
+    /** Colour mode with print quality following it: Ink saver for grayscale, Standard (or Photo on photo paper) for colour. */
+    fun withColor(c: ColorMode): PrintSettings = copy(
+        color = c,
+        quality = when {
+            c != ColorMode.COLOR -> Quality.INK_SAVER
+            paperType != PaperType.PLAIN -> Quality.PHOTO
+            else -> Quality.STANDARD
+        },
+    )
 }
 
 enum class ItemKind { IMAGE, PDF_PAGE, WEB_PAGE }
 
-/** Per-item edits made in the item editor. Offsets are fractions of the cell size. */
+/**
+ * Per-item edits made in the item editor. Offsets are fractions of the cell size.
+ * The crop rectangle is in the upright image's own coordinates (0..1, before rotation).
+ */
 data class ItemEdit(
     val rotation: Int = 0,
     val flip: Boolean = false,
@@ -137,7 +150,15 @@ data class ItemEdit(
     val offsetX: Float = 0f,
     val offsetY: Float = 0f,
     val copies: Int = 1,
-)
+    val cropLeft: Float = 0f,
+    val cropTop: Float = 0f,
+    val cropRight: Float = 1f,
+    val cropBottom: Float = 1f,
+) {
+    val cropWidth: Float get() = (cropRight - cropLeft).coerceIn(0.02f, 1f)
+    val cropHeight: Float get() = (cropBottom - cropTop).coerceIn(0.02f, 1f)
+    val isCropped: Boolean get() = cropLeft > 0.001f || cropTop > 0.001f || cropRight < 0.999f || cropBottom < 0.999f
+}
 
 /** One printable thing: a photo, one PDF page or one slice of a web page. */
 data class JobItem(

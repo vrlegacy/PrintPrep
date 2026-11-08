@@ -68,7 +68,10 @@ class Exporter(private val context: Context, private val store: ImageStore) {
                             val ch = p.cell.height * k
                             content.append("q ")
                                 .append("${PdfWriter.n(cl)} ${PdfWriter.n(pageH - ct - ch)} ${PdfWriter.n(cw)} ${PdfWriter.n(ch)} re W n ")
-                                .append(placementMatrix(p, s, img, cl, ct, cw, ch, pageH).toPdf())
+                            val (outer, inner, cropW, cropH) = placementMatrices(p, s, img, cl, ct, cw, ch, pageH)
+                            content.append(outer.toPdf())
+                                .append(" 0 0 ${PdfWriter.n(cropW)} ${PdfWriter.n(cropH)} re W n ")
+                                .append(inner.toPdf())
                                 .append(" /Im${img.objectId} Do Q\n")
                         }
                         if (s.border || s.cutLines) {
@@ -125,14 +128,22 @@ class Exporter(private val context: Context, private val store: ImageStore) {
         return pdf.addBitmap(bmp, gray)
     }
 
-    /** Same maths as SheetRenderer.drawItem, written as one PDF matrix (y up, points). */
-    private fun placementMatrix(
+    private data class Matrices(val outer: Affine, val inner: Affine, val cropW: Double, val cropH: Double)
+
+    /**
+     * Same maths as SheetRenderer.drawItem, as two PDF matrices:
+     * [Matrices.outer] maps the cropped image (pixels, y down) onto the page, where we clip to the crop;
+     * [Matrices.inner] places the whole original image so that the crop lines up. Pixels are never resampled.
+     */
+    private fun placementMatrices(
         p: Placement, s: PrintSettings, img: PdfWriter.Image,
         cl: Double, ct: Double, cw: Double, ch: Double, pageH: Double,
-    ): Affine {
+    ): Matrices {
         val e = p.item.edit
-        val w = img.width.toDouble()
-        val h = img.height.toDouble()
+        val fullW = img.width.toDouble()
+        val fullH = img.height.toDouble()
+        val w = fullW * e.cropWidth
+        val h = fullH * e.cropHeight
         val (rw, rh) = if (p.rotation % 180 != 0) h to w else w to h
         val base = when (s.fit) {
             FitMode.FIT -> min(cw / rw, ch / rh)
@@ -147,7 +158,9 @@ class Exporter(private val context: Context, private val store: ImageStore) {
 
         val toPdfPage = Affine(1.0, 0.0, 0.0, -1.0, 0.0, pageH)          // y down → y up
         val unitToRaw = Affine(1.0, 0.0, 0.0, -1.0, 0.0, 1.0)            // PDF unit square → raw image (y down)
-        return toPdfPage * m * Affine.scale(w, h) * PdfWriter.exif(img.exifOrientation) * unitToRaw
+        val inner = Affine.translate(-e.cropLeft * fullW, -e.cropTop * fullH) *
+            Affine.scale(fullW, fullH) * PdfWriter.exif(img.exifOrientation) * unitToRaw
+        return Matrices(toPdfPage * m, inner, w, h)
     }
 
     suspend fun saveImages(
