@@ -78,9 +78,10 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------- import ----------------
 
-    fun import(uris: List<Uri>) {
+    /** [openEditor] false keeps the current screen (used by the in-app browser). */
+    fun import(uris: List<Uri>, openEditor: Boolean = true, onAdded: (Int) -> Unit = {}) {
         if (uris.isEmpty()) return
-        screen = Screen.Editor
+        if (openEditor) screen = Screen.Editor
         importing = true
         viewModelScope.launch {
             val wasEmpty = items.isEmpty()
@@ -89,7 +90,60 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
             if (wasEmpty) applyDefaultsFor(result.items)
             importing = false
             if (result.failed.isNotEmpty()) message = "Couldn't open: ${result.failed.joinToString()}"
-            if (items.isEmpty()) screen = Screen.Home
+            if (openEditor && items.isEmpty()) screen = Screen.Home
+            onAdded(result.items.size)
+        }
+    }
+
+    // ---------------- in-app browser ----------------
+
+    /** Short status line shown at the bottom of the browser ("Added 2 pages to print"). */
+    var webNotice by mutableStateOf<String?>(null)
+
+    /** The part of the page currently on screen, as one image. Main thread. */
+    fun captureVisible(web: WebView, title: String) {
+        if (web.width <= 0 || web.height <= 0) return
+        val bmp = Bitmap.createBitmap(web.width, web.height, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(android.graphics.Color.WHITE)
+        c.translate(-web.scrollX.toFloat(), -web.scrollY.toFloat())
+        web.draw(c)
+        val wasEmpty = items.isEmpty()
+        val item = store.saveBitmapItem(bmp, "$title · screen", ItemKind.IMAGE)
+        bmp.recycle()
+        items.add(item)
+        if (wasEmpty) settings = settings.copy(layout = Presets.single, fit = FitMode.FIT)
+        webNotice = "Added the screen to print · ${items.size} item(s) in the job"
+    }
+
+    /**
+     * Downloads an image or file from the page (long-press, or a download link on the site) with the
+     * page's cookies. [toGallery] saves it to Pictures/PrintPrep instead of adding it to the job.
+     */
+    fun fetchFromWeb(url: String, userAgent: String?, referer: String?, toGallery: Boolean) {
+        webNotice = "Downloading…"
+        viewModelScope.launch {
+            val dir = java.io.File(getApplication<Application>().cacheDir, "web")
+            val result = runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    io.printprep.app.data.WebFetch.fetch(url, userAgent, referer, dir, "web_${System.currentTimeMillis()}")
+                }
+            }
+            val fetched = result.getOrElse {
+                webNotice = null
+                message = "Couldn't download: ${it.message}"
+                return@launch
+            }
+            if (toGallery) {
+                webNotice = runCatching {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { exporter.saveToGallery(fetched.file, fetched.mime) }
+                }.fold({ "Saved to Pictures/PrintPrep" }, { "Couldn't save: ${it.message}" })
+                fetched.file.delete()
+            } else {
+                import(listOf(Uri.fromFile(fetched.file)), openEditor = false) { n ->
+                    webNotice = if (n > 0) "Added to print · ${items.size} item(s) in the job" else "That file couldn't be opened."
+                }
+            }
         }
     }
 
@@ -124,7 +178,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         }
         items.addAll(added)
         if (wasEmpty) applyDefaultsFor(added)
-        screen = Screen.Editor
+        webNotice = "Added ${added.size} page(s) to print · ${items.size} item(s) in the job"
     }
 
     // ---------------- navigation ----------------

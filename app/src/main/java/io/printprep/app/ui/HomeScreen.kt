@@ -75,6 +75,10 @@ fun HomeScreen(vm: JobViewModel) {
                 onClick = { files.launch(arrayOf("application/pdf", "image/*", "image/webp")) },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
             ) { Text("Pick PDFs or files") }
+            FilledTonalButton(
+                onClick = { vm.openWeb(WebShortcuts.KARNATAKA_LAND_RECORDS) },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+            ) { Text("Karnataka land records (RTC)") }
             FilledTonalButton(onClick = { askUrl = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                 Text("Print a web page")
             }

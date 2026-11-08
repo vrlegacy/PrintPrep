@@ -194,6 +194,20 @@ class Exporter(private val context: Context, private val store: ImageStore) {
         ExportResult(uris, mime, "Saved ${uris.size} ${format.label} image(s) to Pictures/PrintPrep at $dpi DPI.")
     }
 
+    /** Copies a downloaded file into Pictures/PrintPrep (images) or Downloads/PrintPrep (anything else). */
+    fun saveToGallery(file: File, mime: String?) {
+        val type = mime ?: when (ImageFormat.sourceFormat(file)) { ImageFormat.PNG -> "image/png"; ImageFormat.WEBP -> "image/webp"; else -> "image/jpeg" }
+        val isImage = type.startsWith("image/")
+        val uri = create(
+            "PrintPrep_${System.currentTimeMillis()}${"." + file.extension.ifBlank { "jpg" }}",
+            type,
+            if (isImage) MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) else MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+            if (isImage) Environment.DIRECTORY_PICTURES else Environment.DIRECTORY_DOWNLOADS,
+        )
+        context.contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: throw IOException("Cannot write the file")
+        finish(uri)
+    }
+
     private fun create(displayName: String, mime: String, collection: Uri, rootDir: String): Uri {
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)

@@ -101,3 +101,18 @@ On plain paper the printer can't print to the very edge, so a sheet with no marg
 - [ ] Unplug the cable mid-job: a clear message, no crash; replug and print again works
 - [ ] Out of paper: a clear "Out of paper" message
 - [ ] 20 jobs in a row without a failure
+
+
+## In-app browser (web pages and Karnataka land records)
+
+Home → **Karnataka land records (RTC)** opens https://landrecords.karnataka.gov.in/Service2/ inside the app
+(**Print a web page** opens any other address). In the browser:
+
+- **Capture screen**: what's on screen now, as one image; **Full page**: the whole page split into printable pages
+- **Long-press an image** → *Add to print* or *Save to gallery* (downloaded with the page's own session, so it works after filling the form)
+- Files the site downloads (PDF or image) are added to the print job automatically
+- **Desktop site** switch for sites that only work well in desktop layout; Back goes back inside the site
+- **Print (n)** jumps to the print screen with everything you've collected
+
+- [ ] Land records: fill the form, view the RTC, Capture screen → it appears in the print job and prints/saves correctly
+- [ ] Long-press an image on the site → Add to print / Save to gallery both work
