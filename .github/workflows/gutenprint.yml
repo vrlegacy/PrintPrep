@@ -27,6 +27,12 @@ jobs:
           cc -O1 -o /tmp/gp-host/printtest native/probe/printtest.c -I/tmp/gp-host/include /tmp/gp-host/lib/libgutenprint.a -lm
           /tmp/gp-host/printtest 2>/tmp/printtest-err.txt | tee /tmp/printtest.txt
           echo "--- driver messages:"; sort /tmp/printtest-err.txt | uniq -c | head -40
+          mkdir -p /tmp/g2010-test-pages && /tmp/gp-host/printtest /tmp/g2010-test-pages && ls -la /tmp/g2010-test-pages
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: g2010-test-pages
+          path: /tmp/g2010-test-pages/*.prn
 
       - name: Cross-compile for Android arm64
         run: native/build-android.sh

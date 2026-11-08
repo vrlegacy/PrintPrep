@@ -11,6 +11,7 @@
 typedef struct { int w, h; } rep_t;
 static size_t g_bytes;
 static unsigned char g_head[8];
+static FILE *g_file;
 
 static void im_noop(stp_image_t *i) { (void) i; }
 static int im_w(stp_image_t *i) { return ((rep_t *) i->rep)->w; }
@@ -18,10 +19,16 @@ static int im_h(stp_image_t *i) { return ((rep_t *) i->rep)->h; }
 static const char *im_app(stp_image_t *i) { (void) i; return "printtest"; }
 static stp_image_status_t im_row(stp_image_t *i, unsigned char *d, size_t lim, int row) {
     rep_t *r = i->rep;
+    static const unsigned char bars[7][3] = {{0,255,255},{255,0,255},{255,255,0},{0,0,0},{255,0,0},{0,255,0},{0,0,255}};
+    int band = row * 20 / r->h;               /* page split into 20 horizontal bands */
     for (int x = 0; x < r->w && (size_t) (x * 3 + 2) < lim; x++) {
-        d[x * 3] = (unsigned char) (x * 255 / r->w);
-        d[x * 3 + 1] = (unsigned char) (row * 255 / r->h);
-        d[x * 3 + 2] = (unsigned char) ((x + row) % 256);
+        unsigned char c[3] = {255, 255, 255};
+        int col = x * 7 / r->w;
+        if (band == 2 || band == 3) { c[0] = bars[col][0]; c[1] = bars[col][1]; c[2] = bars[col][2]; }      /* colour bars */
+        else if (band == 5) { unsigned char g = (unsigned char) (255 - x * 255 / r->w); c[0] = c[1] = c[2] = g; } /* grey ramp */
+        else if (band >= 7 && band <= 12 && (row / 6) % 4 == 0 && x > r->w / 10 && x < r->w * 9 / 10) { c[0] = c[1] = c[2] = 0; } /* black lines */
+        if (x < 4 || x >= r->w - 4 || row < 4 || row >= r->h - 4) { c[0] = c[1] = c[2] = 0; }                 /* frame */
+        d[x * 3] = c[0]; d[x * 3 + 1] = c[1]; d[x * 3 + 2] = c[2];
     }
     return STP_IMAGE_STATUS_OK;
 }
@@ -29,6 +36,7 @@ static void out(void *d, const char *b, size_t n) {
     (void) d;
     if (g_bytes < 8) memcpy(g_head + g_bytes, b, n < 8 - g_bytes ? n : 8 - g_bytes);
     g_bytes += n;
+    if (g_file) fwrite(b, 1, n, g_file);
 }
 static void err(void *d, const char *b, size_t n) { (void) d; fwrite(b, 1, n, stderr); }
 
@@ -102,8 +110,22 @@ static int run(const char *page, const char *media, const char *res, int bw, int
     return ok;
 }
 
-int main(void) {
+/* Writes one real test page to a file, using exactly the app's options for that mode. */
+static void write_file(const char *path, const char *res, int bw) {
+    g_file = fopen(path, "wb");
+    run("A4", "Plain", res, bw, 0);
+    fclose(g_file);
+    g_file = NULL;
+}
+
+int main(int argc, char **argv) {
     stp_init();
+    if (argc > 1) {   /* printtest OUTDIR: make test pages to send raw from a computer */
+        char p[512];
+        snprintf(p, sizeof p, "%s/g2010_test_standard_colour.prn", argv[1]); write_file(p, "600x600dpi", 0);
+        snprintf(p, sizeof p, "%s/g2010_test_inksaver_black.prn", argv[1]); write_file(p, "300x300dpi", 1);
+        return 0;
+    }
     const char *media[] = {"Plain", "PhotoPlusGloss2", "PhotopaperMatte", "PhotopaperOther"};
     const char *plainRes[] = {"300x300dpi", "600x600dpi", "600x600dpi_high"};
     const char *photoRes[] = {"300x300dpi", "600x600dpi", "600x600dpi_high", "600x600dpi_photo", "600x600dpi_photohigh", "600x600dpi_photohigh2"};
