@@ -15,7 +15,11 @@ export CFLAGS="-O2 -fPIC"
 "$SRC/configure" --host=aarch64-linux-android --prefix="$OUT/install" $(cat ../configure-flags.txt) >/tmp/gp-android-configure.log 2>&1 || { tail -60 /tmp/gp-android-configure.log; exit 1; }
 make -j"$(nproc)" -C src/main >/tmp/gp-android-make.log 2>&1 || { tail -100 /tmp/gp-android-make.log; exit 1; }
 make -C src/main install >/dev/null
-make -C include install >/dev/null 2>&1 || true
+# Public headers: from the source tree plus the ones configure generated in the build tree
+mkdir -p "$OUT/install/include/gutenprint"
+cp "$SRC"/include/gutenprint/*.h "$OUT/install/include/gutenprint/" 2>/dev/null || true
+cp include/gutenprint/*.h "$OUT/install/include/gutenprint/" 2>/dev/null || true
+ls "$OUT/install/include/gutenprint"
 # XML printer data comes from the host install (same files; architecture-independent)
 mkdir -p "$OUT/data"
 cp -r /tmp/gp-host/share/gutenprint/*/xml "$OUT/data/" 2>/dev/null || cp -r "$SRC/src/xml" "$OUT/data/xml"

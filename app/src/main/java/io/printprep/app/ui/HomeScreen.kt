@@ -82,12 +82,8 @@ fun HomeScreen(vm: JobViewModel) {
                 OutlinedButton(onClick = { vm.newJob() }, modifier = Modifier.fillMaxWidth()) { Text("Start a new job") }
             }
 
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Printer", style = MaterialTheme.typography.titleSmall)
-                    Hint("Not connected. USB printing to the Canon G2010 arrives in Phase 2 — for now, save as PDF or images.")
-                }
-            }
+            PrinterStatusCard(vm)
+            OutlinedButton(onClick = { vm.openDiagnostics() }, modifier = Modifier.fillMaxWidth()) { Text("Printer diagnostics & test page") }
         }
     }
 

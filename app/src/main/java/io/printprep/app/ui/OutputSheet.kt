@@ -34,7 +34,7 @@ import io.printprep.app.engine.PrintPlan
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onDismiss: () -> Unit) {
+fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onPrint: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var dpi by remember { mutableIntStateOf(300) }
     var png by remember { mutableStateOf(false) }
@@ -84,8 +84,8 @@ fun OutputSheet(vm: JobViewModel, plan: PrintPlan, onDismiss: () -> Unit) {
             }
 
             HorizontalDivider()
-            Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
-                Text("Print on Canon G2010 (USB) — Phase 2")
+            Button(onClick = onPrint, enabled = plan.sheets.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+                Text("Print on Canon G2010 (USB)")
             }
             Hint("Two-sided and paper/quality settings take effect when printing. Saved files contain every page in print order.")
         }

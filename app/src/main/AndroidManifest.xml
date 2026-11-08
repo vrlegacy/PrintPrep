@@ -4,6 +4,9 @@
     <!-- Only for loading web pages shared as links. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- USB printing over an OTG cable; the app still installs on phones without USB host. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <application
         android:label="@string/app_name"
         android:largeHeap="true"
@@ -36,6 +39,14 @@
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/pdf" />
             </intent-filter>
+
+            <!-- Plugging in the Canon printer offers to open PrintPrep; ticking "Always" also grants USB access. -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_printers" />
 
             <!-- "Open with" for images and PDFs -->
             <intent-filter>

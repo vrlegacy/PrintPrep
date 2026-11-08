@@ -19,12 +19,37 @@ jobs:
         with:
           packages: "platform-tools"
 
+      - name: Pick NDK
+        run: |
+          echo "NDK_DIR=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "NDK_VER=$(basename "$ANDROID_NDK_LATEST_HOME")" >> "$GITHUB_ENV"
+
+      - name: Cache Canon driver (Gutenprint) build
+        id: gpcache
+        uses: actions/cache@v4
+        with:
+          path: native/prebuilt
+          key: gutenprint-${{ env.NDK_VER }}-${{ hashFiles('native/*.sh', 'native/configure-flags.txt') }}
+
+      - name: Build Canon driver (Gutenprint) for Android
+        if: steps.gpcache.outputs.cache-hit != 'true'
+        run: |
+          native/fetch-gutenprint.sh
+          native/build-host.sh
+          ANDROID_NDK_LATEST_HOME="$NDK_DIR" native/build-android.sh
+
+      - name: Bundle printer data
+        run: |
+          mkdir -p app/src/main/assets/gutenprint
+          rm -rf app/src/main/assets/gutenprint/xml
+          cp -r native/prebuilt/arm64-v8a/data/xml app/src/main/assets/gutenprint/xml
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace -PndkVer="$NDK_VER"
 
       - uses: actions/upload-artifact@v4
         with:

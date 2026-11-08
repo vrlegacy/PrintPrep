@@ -37,16 +37,27 @@ sealed interface Screen {
     data object Editor : Screen
     data class EditItem(val itemId: Long) : Screen
     data class Web(val url: String) : Screen
+    data object Diagnostics : Screen
 }
 
 class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     val store = ImageStore(app)
     private val exporter = Exporter(app, store)
+    private val prefs = app.getSharedPreferences("printprep", android.content.Context.MODE_PRIVATE)
+
+    /** USB printer and print jobs. */
+    val print = io.printprep.app.print.PrintController(app, store, viewModelScope)
 
     val items = mutableStateListOf<JobItem>()
 
-    var settings by mutableStateOf(PrintSettings())
+    var settings by mutableStateOf(
+        PrintSettings(
+            reverseBackOrder = prefs.getBoolean("reverseBackOrder", false),
+            rotateBack180 = prefs.getBoolean("rotateBack180", false),
+            lastPageFirst = prefs.getBoolean("lastPageFirst", true),
+        )
+    )
         private set
     var screen by mutableStateOf<Screen>(Screen.Home)
         private set
@@ -130,6 +141,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         screen = when (screen) {
             is Screen.EditItem -> Screen.Editor
             is Screen.Web -> if (items.isEmpty()) Screen.Home else Screen.Editor
+            Screen.Diagnostics -> if (items.isEmpty()) Screen.Home else Screen.Editor
             else -> Screen.Home
         }
     }
@@ -138,6 +150,36 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     fun update(change: (PrintSettings) -> PrintSettings) {
         settings = change(settings)
+        savePrinterPrefs()
+    }
+
+    /** Two-sided calibration and stacking order belong to the printer, so they're remembered. */
+    private fun savePrinterPrefs() {
+        prefs.edit()
+            .putBoolean("reverseBackOrder", settings.reverseBackOrder)
+            .putBoolean("rotateBack180", settings.rotateBack180)
+            .putBoolean("lastPageFirst", settings.lastPageFirst)
+            .apply()
+    }
+
+    // ---------------- printing ----------------
+
+    fun printNow() = print.print(plan(), settings)
+
+    fun startDuplexSetupTest() = print.startSetupTest(settings)
+
+    fun answerDuplexSetup(backOnCorrectSheet: Boolean, backUpsideDown: Boolean) {
+        settings = print.applySetupAnswers(settings, backOnCorrectSheet, backUpsideDown)
+        savePrinterPrefs()
+    }
+
+    fun openDiagnostics() {
+        screen = Screen.Diagnostics
+    }
+
+    override fun onCleared() {
+        print.close()
+        super.onCleared()
     }
 
     /** Changes colour mode; print quality follows (Ink saver for grayscale) and can still be changed after. */
@@ -166,7 +208,11 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newJob() {
         items.clear()
-        settings = PrintSettings()
+        settings = PrintSettings(
+            reverseBackOrder = settings.reverseBackOrder,
+            rotateBack180 = settings.rotateBack180,
+            lastPageFirst = settings.lastPageFirst,
+        )
         lastExport = null
         store.clear()
         screen = Screen.Home

@@ -63,9 +63,10 @@ object SheetRenderer {
         pxPerMm: Float,
         dpi: Int,
         loader: BitmapLoader,
+        preFiltered: Boolean = false,
     ) {
         canvas.drawColor(Color.WHITE)
-        val filter = colorFilter(s)
+        val filter = if (preFiltered) null else colorFilter(s)
         val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
         for (p in sheet.placements) {

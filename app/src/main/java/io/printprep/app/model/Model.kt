@@ -120,6 +120,8 @@ data class PrintSettings(
     val pageRange: String = "",
     val copies: Int = 1,
     val collate: Boolean = true,
+    /** The G2010 stacks pages face up, so printing the last page first leaves page 1 on top. */
+    val lastPageFirst: Boolean = true,
     val duplex: Duplex = Duplex.OFF,
     val reverseBackOrder: Boolean = false,
     val rotateBack180: Boolean = false,

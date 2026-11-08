@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Canon Inc. (vendor id 0x04A9) -->
+    <usb-device vendor-id="1193" />
+    <!-- Any USB printer-class device (class 7) -->
+    <usb-device class="7" />
+</resources>

@@ -12,3 +12,4 @@ native/gutenprint-src/
 native/build-host/
 native/build-android/
 native/prebuilt/
+app/src/main/assets/gutenprint/

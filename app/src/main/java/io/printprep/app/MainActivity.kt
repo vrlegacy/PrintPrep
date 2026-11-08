@@ -32,6 +32,11 @@ class MainActivity : ComponentActivity() {
         setContent { AppTheme { App(vm) } }
     }
 
+    override fun onResume() {
+        super.onResume()
+        vm.print.printer.refresh()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
@@ -40,6 +45,10 @@ class MainActivity : ComponentActivity() {
     /** Anything shared or "opened with" this app. New shares are added to the current job. */
     private fun handleIntent(intent: Intent?) {
         intent ?: return
+        if (intent.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            vm.print.printer.refresh()
+            return
+        }
         val uris = mutableListOf<Uri>()
         when (intent.action) {
             Intent.ACTION_SEND -> {
@@ -78,6 +87,7 @@ private fun App(vm: JobViewModel) {
         Screen.Editor -> EditorScreen(vm)
         is Screen.EditItem -> ItemEditScreen(vm, screen.itemId)
         is Screen.Web -> WebCaptureScreen(vm, screen.url)
+        Screen.Diagnostics -> io.printprep.app.ui.DiagnosticsScreen(vm)
     }
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(vm.pendingShare) {

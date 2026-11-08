@@ -4,6 +4,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// The Canon driver (Gutenprint) is cross-compiled by native/build-android.sh before Gradle runs
+// (the GitHub build does this). Without it the app still builds; printing then reports the driver is missing.
+val gutenprintLib = rootProject.file("native/prebuilt/arm64-v8a/install/lib/libgutenprint.a")
+val hasGutenprint = gutenprintLib.exists()
+
 android {
     namespace = "io.printprep.app"
     compileSdk = 35
@@ -13,7 +18,15 @@ android {
         minSdk = 33          // Android 13+
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1-phase1"
+        versionName = "0.2-phase2"
+        ndk { abiFilters += "arm64-v8a" }
+    }
+
+    providers.gradleProperty("ndkVer").orNull?.let { ndkVersion = it }
+    if (hasGutenprint) {
+        externalNativeBuild {
+            cmake { path = file("src/main/cpp/CMakeLists.txt") }
+        }
     }
 
     buildTypes {

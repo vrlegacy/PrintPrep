@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -36,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
@@ -95,6 +97,7 @@ fun EditorScreen(vm: JobViewModel) {
     val plan = remember(items, s) { LayoutEngine.plan(items, s) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showOutput by remember { mutableStateOf(false) }
+    var showPrint by remember { mutableStateOf(false) }
     val addFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.import(it) }
 
     Scaffold(
@@ -118,11 +121,21 @@ fun EditorScreen(vm: JobViewModel) {
         },
         bottomBar = {
             Surface(tonalElevation = 3.dp) {
-                Button(
-                    onClick = { showOutput = true },
-                    enabled = plan.sheets.isNotEmpty() && !vm.importing,
-                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
-                ) { Text("Save or print · ${plan.paperCount} sheet(s) of paper") }
+                Row(
+                    Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { showOutput = true },
+                        enabled = plan.sheets.isNotEmpty() && !vm.importing,
+                        modifier = Modifier.weight(1f).height(52.dp),
+                    ) { Text("Save…") }
+                    Button(
+                        onClick = { showPrint = true },
+                        enabled = plan.sheets.isNotEmpty() && !vm.importing,
+                        modifier = Modifier.weight(2f).height(52.dp),
+                    ) { Text("Print · ${plan.paperCount} sheet(s)") }
+                }
             }
         },
     ) { pad ->
@@ -148,7 +161,8 @@ fun EditorScreen(vm: JobViewModel) {
             }
         }
     }
-    if (showOutput) OutputSheet(vm, plan) { showOutput = false }
+    if (showOutput) OutputSheet(vm, plan, onPrint = { showOutput = false; showPrint = true }) { showOutput = false }
+    if (showPrint) PrintSheet(vm, plan) { showPrint = false }
 }
 
 private fun summary(plan: PrintPlan, itemCount: Int): String {
@@ -392,6 +406,9 @@ private fun PagesPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
     SwitchRow("Collate", s.collate, "On: 1-2-3, 1-2-3. Off: 1-1, 2-2, 3-3", enabled = s.copies > 1) { v ->
         vm.update { it.copy(collate = v) }
     }
+    SwitchRow("Print last page first", s.lastPageFirst, "The G2010 stacks pages face up: this leaves page 1 on top. Remembered for next time.") { v ->
+        vm.update { it.copy(lastPageFirst = v) }
+    }
     ChoiceChips("Two-sided", Duplex.entries, s.duplex, { it.label }) { d -> vm.update { it.copy(duplex = d) } }
     if (s.duplex != Duplex.OFF) {
         SwitchRow("Reverse order of back sides", s.reverseBackOrder, "Set by the two-sided setup test in Phase 2") { v ->
@@ -399,6 +416,7 @@ private fun PagesPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
         }
         SwitchRow("Rotate back sides 180°", s.rotateBack180) { v -> vm.update { it.copy(rotateBack180 = v) } }
         plan.twoSided?.let { TwoSidedCard(it) }
+        Hint("Not sure which way to reload the paper? Run the two-sided setup test from the Print button once; it sets these two switches for you.")
     }
 }
 
