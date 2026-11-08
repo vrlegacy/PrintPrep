@@ -8,3 +8,7 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+native/gutenprint-src/
+native/build-host/
+native/build-android/
+native/prebuilt/

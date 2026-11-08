@@ -1,0 +1,31 @@
+name: Gutenprint (driver build + G2010 probe)
+
+on:
+  push:
+    paths:
+      - "native/**"
+      - ".github/workflows/gutenprint.yml"
+  workflow_dispatch:
+
+jobs:
+  gutenprint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Gutenprint source
+        run: native/fetch-gutenprint.sh
+
+      - name: Build for the CI machine (for the probe)
+        run: native/build-host.sh
+
+      - name: Probe Canon G2010 options
+        run: /tmp/gp-host/probe | tee /tmp/probe.txt
+
+      - name: Cross-compile for Android arm64
+        run: native/build-android.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gutenprint-probe
+          path: /tmp/probe.txt

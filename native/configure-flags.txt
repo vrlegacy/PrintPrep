@@ -1,0 +1,1 @@
+--disable-nls --without-cups --without-gimp2 --disable-libgutenprintui2 --disable-escputil --disable-test --disable-testpattern --without-doc --disable-samples --enable-static --disable-shared --without-modules --disable-globalized-cups --without-foomatic --without-ghostscript
