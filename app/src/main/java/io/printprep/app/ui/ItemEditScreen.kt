@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -110,6 +111,16 @@ fun ItemEditScreen(vm: JobViewModel, itemId: Long) {
         vm.updateEdit(itemId, change(current))
     }
 
+    // Store the snapped angle once the editor closes, so the sheet, PDF and print match what was shown.
+    androidx.compose.runtime.DisposableEffect(itemId) {
+        onDispose {
+            vm.items.firstOrNull { it.id == itemId }?.edit?.let { e ->
+                val snapped = snapAngle(e.angle)
+                if (snapped != e.angle) vm.updateEdit(itemId, e.copy(angle = snapped))
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -147,7 +158,7 @@ fun ItemEditScreen(vm: JobViewModel, itemId: Long) {
             }
             Text(
                 if (mode == EditMode.CROP) "Drag the corners or edges to crop · drag inside to move the crop"
-                else "Drag to move · pinch to zoom · this frame is the photo's place on the sheet",
+                else "Drag to move · pinch to zoom · twist with two fingers to rotate · double-tap to reset",
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.labelMedium,
                 textAlign = TextAlign.Center,
@@ -175,6 +186,11 @@ fun ItemEditScreen(vm: JobViewModel, itemId: Long) {
                         OutlinedButton(onClick = { mode = EditMode.CROP }) { Text("✂ Crop") }
                     }
                 }
+                if (mode == EditMode.POSITION) {
+                    SliderRow("Rotate by hand", snapAngle(item.edit.angle), -180f..180f, "%.0f°".format(snapAngle(item.edit.angle))) { v ->
+                        edit { it.copy(angle = v) }
+                    }
+                }
                 Stepper("Copies of this item", item.edit.copies, 1, 99) { v -> edit { it.copy(copies = v) } }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { vm.move(itemId, -1) }, enabled = index > 0) { Text("Move earlier") }
@@ -184,7 +200,7 @@ fun ItemEditScreen(vm: JobViewModel, itemId: Long) {
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) { Text("Remove") }
                 }
-                Hint("Item ${index + 1} of ${all.size}. Cancel undoes everything changed here; Reset clears rotation, crop, zoom and position.")
+                Hint("Item ${index + 1} of ${all.size}. The frame is the photo's place on the sheet. Cancel undoes everything changed here; Reset clears rotation, crop, zoom and position.")
             }
         }
     }
@@ -221,23 +237,54 @@ private fun PositionView(
             .background(Color.White)
             .border(1.dp, MaterialTheme.colorScheme.outline)
             .pointerInput(itemId) {
-                detectTransformGestures { _, pan, zoom, _ ->
+                // one finger: move · two fingers: pinch to zoom and twist to rotate
+                detectTransformGestures { _, pan, zoom, twist ->
                     onChange {
                         it.copy(
                             zoom = (it.zoom * zoom).coerceIn(0.2f, 6f),
                             offsetX = (it.offsetX + pan.x / size.width).coerceIn(-1f, 1f),
                             offsetY = (it.offsetY + pan.y / size.height).coerceIn(-1f, 1f),
+                            angle = it.angle + twist,
                         )
                     }
                 }
+            }
+            .pointerInput(itemId) {
+                // double-tap: back to the default size, position and angle
+                detectTapGestures(onDoubleTap = {
+                    onChange { it.copy(zoom = 1f, offsetX = 0f, offsetY = 0f, angle = 0f) }
+                })
             },
     ) {
+        val shown = edit.copy(angle = snapAngle(edit.angle))
         Canvas(Modifier.fillMaxSize()) {
             drawIntoCanvas { c ->
-                SheetRenderer.drawItem(c.nativeCanvas, bmp, RectF(0f, 0f, size.width, size.height), edit, fit, scalePercent, rotation, paint)
+                SheetRenderer.drawItem(c.nativeCanvas, bmp, RectF(0f, 0f, size.width, size.height), shown, fit, scalePercent, rotation, paint)
             }
         }
+        if (abs(shown.angle) >= 0.5f || edit.zoom != 1f) {
+            Text(
+                buildString {
+                    if (abs(shown.angle) >= 0.5f) append("%.0f°".format(shown.angle))
+                    if (edit.zoom != 1f) { if (isNotEmpty()) append("  ·  "); append("%.0f%%".format(edit.zoom * 100)) }
+                },
+                Modifier.align(Alignment.TopStart).padding(6.dp).background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 2.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
     }
+}
+
+/**
+ * Keeps a hand-rotated angle in -180..180 and snaps it to straight (0°, ±90°, 180°)
+ * when it's within 3°, so photos are easy to get perfectly level.
+ */
+fun snapAngle(a: Float): Float {
+    var x = ((a % 360f) + 540f) % 360f - 180f
+    val nearest = Math.round(x / 90f) * 90f
+    if (abs(x - nearest) < 3f) x = nearest
+    return if (x == -180f) 180f else x
 }
 
 private enum class Handle { TL, TR, BL, BR, LEFT, RIGHT, TOP, BOTTOM, MOVE }

@@ -156,6 +156,8 @@ data class ItemEdit(
     val cropTop: Float = 0f,
     val cropRight: Float = 1f,
     val cropBottom: Float = 1f,
+    /** Free rotation by hand, in degrees (-180..180), on top of the 90° steps in [rotation]. */
+    val angle: Float = 0f,
 ) {
     val cropWidth: Float get() = (cropRight - cropLeft).coerceIn(0.02f, 1f)
     val cropHeight: Float get() = (cropBottom - cropTop).coerceIn(0.02f, 1f)

@@ -142,8 +142,8 @@ class PdfWriter(out: OutputStream) {
     companion object {
         fun n(v: Double): String = String.format(Locale.US, "%.4f", v).trimEnd('0').trimEnd('.').ifEmpty { "0" }
 
-        fun rotate(degrees: Int): Affine {
-            val r = Math.toRadians(degrees.toDouble())
+        fun rotate(degrees: Double): Affine {
+            val r = Math.toRadians(degrees)
             return Affine(cos(r), sin(r), -sin(r), cos(r), 0.0, 0.0)
         }
 

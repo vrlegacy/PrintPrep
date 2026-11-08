@@ -152,7 +152,7 @@ class Exporter(private val context: Context, private val store: ImageStore) {
         val scale = base * e.zoom * (s.scalePercent / 100.0)
 
         // In "canvas" space (y down, points): exactly what the preview does.
-        var m = Affine.translate(cl + cw / 2 + e.offsetX * cw, ct + ch / 2 + e.offsetY * ch) * PdfWriter.rotate(p.rotation)
+        var m = Affine.translate(cl + cw / 2 + e.offsetX * cw, ct + ch / 2 + e.offsetY * ch) * PdfWriter.rotate(p.rotation + e.angle.toDouble())
         if (e.flip) m = m * Affine.scale(-1.0, 1.0)
         m = m * Affine.scale(scale, scale) * Affine.translate(-w / 2, -h / 2)
 

@@ -120,7 +120,7 @@ object SheetRenderer {
             cell.centerX() + edit.offsetX * cell.width(),
             cell.centerY() + edit.offsetY * cell.height(),
         )
-        canvas.rotate(rotation.toFloat())
+        canvas.rotate(rotation.toFloat() + edit.angle)
         if (edit.flip) canvas.scale(-1f, 1f)
         canvas.scale(scale, scale)
         canvas.drawBitmap(bmp, src, RectF(-w / 2f, -h / 2f, w / 2f, h / 2f), paint)
