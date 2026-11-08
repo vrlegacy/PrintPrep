@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -158,56 +161,51 @@ fun ItemEditScreen(vm: JobViewModel, itemId: Long) {
             }
             Text(
                 if (mode == EditMode.CROP) "Drag the corners or edges to crop · drag inside to move the crop"
-                else "Drag to move · pinch to zoom · twist with two fingers to rotate · double-tap to reset",
+                else "Drag to move · pinch to zoom · twist to turn 90° · double-tap to reset",
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.labelMedium,
                 textAlign = TextAlign.Center,
             )
 
-            // ---------------- tools
+            // ---------------- tools (compact)
             Column(
-                Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // mode + crop reset on one line
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     EditMode.entries.forEach { m ->
                         FilterChip(selected = mode == m, onClick = { mode = m }, label = { Text(m.label) })
                     }
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { edit { it.rotatedBy(270) } }) { Text("⟲ Rotate left") }
-                    OutlinedButton(onClick = { edit { it.rotatedBy(90) } }) { Text("⟳ Rotate right") }
-                    OutlinedButton(onClick = { edit { it.copy(flip = !it.flip) } }) { Text("Flip") }
-                    if (mode == EditMode.CROP) {
-                        OutlinedButton(onClick = { edit { it.copy(cropLeft = 0f, cropTop = 0f, cropRight = 1f, cropBottom = 1f) } }) {
+                    Spacer(Modifier.weight(1f))
+                    if (item.edit.isCropped) {
+                        TextButton(onClick = { edit { it.copy(cropLeft = 0f, cropTop = 0f, cropRight = 1f, cropBottom = 1f) } }) {
                             Text("Clear crop")
                         }
-                    } else {
-                        OutlinedButton(onClick = { mode = EditMode.CROP }) { Text("✂ Crop") }
                     }
                 }
-                if (mode == EditMode.POSITION) {
-                    SliderRow("Rotate by hand", snapAngle(item.edit.angle), -180f..180f, "%.0f°".format(snapAngle(item.edit.angle))) { v ->
-                        edit { it.copy(angle = v) }
-                    }
+                // rotation: four positions only
+                val quarter = ((item.edit.rotation % 360 + 360) % 360) / 90
+                SliderRow("Rotate", quarter.toFloat(), 0f..3f, "${quarter * 90}°", steps = 2) { v ->
+                    val q = Math.round(v).coerceIn(0, 3)
+                    if (q != quarter) edit { it.copy(rotation = q * 90, angle = 0f, offsetX = 0f, offsetY = 0f) }
                 }
-                Stepper("Copies of this item", item.edit.copies, 1, 99) { v -> edit { it.copy(copies = v) } }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { vm.move(itemId, -1) }, enabled = index > 0) { Text("Move earlier") }
-                    OutlinedButton(onClick = { vm.move(itemId, 1) }, enabled = index < all.lastIndex) { Text("Move later") }
+                // copies + delete on one line
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        Stepper("Copies", item.edit.copies, 1, 99) { v -> edit { it.copy(copies = v) } }
+                    }
+                    Spacer(Modifier.width(12.dp))
                     OutlinedButton(
                         onClick = { vm.remove(itemId) },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { Text("Remove") }
+                    ) { Text("Delete") }
                 }
-                Hint("Item ${index + 1} of ${all.size}. The frame is the photo's place on the sheet. Cancel undoes everything changed here; Reset clears rotation, crop, zoom and position.")
+                Hint("Item ${index + 1} of ${all.size} · Cancel undoes changes made here · Reset clears rotation, crop, zoom and position")
             }
         }
     }
 }
-
-/** Rotating also moves the pan offsets so the visible part stays put; crop stays attached to the image. */
-private fun ItemEdit.rotatedBy(deg: Int): ItemEdit = copy(rotation = (rotation + deg) % 360, offsetX = 0f, offsetY = 0f)
 
 @Composable
 private fun ColorButton(text: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
@@ -237,14 +235,23 @@ private fun PositionView(
             .background(Color.White)
             .border(1.dp, MaterialTheme.colorScheme.outline)
             .pointerInput(itemId) {
-                // one finger: move · two fingers: pinch to zoom and twist to rotate
+                // one finger: move · two fingers: pinch to zoom; a twist past 45° turns the photo a quarter turn
+                var twisted = 0f
                 detectTransformGestures { _, pan, zoom, twist ->
+                    twisted += twist
+                    val step = when {
+                        twisted >= 45f -> 90
+                        twisted <= -45f -> 270
+                        else -> 0
+                    }
+                    if (step != 0) twisted = 0f
                     onChange {
                         it.copy(
                             zoom = (it.zoom * zoom).coerceIn(0.2f, 6f),
-                            offsetX = (it.offsetX + pan.x / size.width).coerceIn(-1f, 1f),
-                            offsetY = (it.offsetY + pan.y / size.height).coerceIn(-1f, 1f),
-                            angle = it.angle + twist,
+                            offsetX = if (step != 0) 0f else (it.offsetX + pan.x / size.width).coerceIn(-1f, 1f),
+                            offsetY = if (step != 0) 0f else (it.offsetY + pan.y / size.height).coerceIn(-1f, 1f),
+                            rotation = (it.rotation + step) % 360,
+                            angle = 0f,
                         )
                     }
                 }
@@ -262,12 +269,9 @@ private fun PositionView(
                 SheetRenderer.drawItem(c.nativeCanvas, bmp, RectF(0f, 0f, size.width, size.height), shown, fit, scalePercent, rotation, paint)
             }
         }
-        if (abs(shown.angle) >= 0.5f || edit.zoom != 1f) {
+        if (edit.zoom != 1f) {
             Text(
-                buildString {
-                    if (abs(shown.angle) >= 0.5f) append("%.0f°".format(shown.angle))
-                    if (edit.zoom != 1f) { if (isNotEmpty()) append("  ·  "); append("%.0f%%".format(edit.zoom * 100)) }
-                },
+                "%.0f%%".format(edit.zoom * 100),
                 Modifier.align(Alignment.TopStart).padding(6.dp).background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 2.dp),
                 color = Color.White,
                 style = MaterialTheme.typography.labelMedium,

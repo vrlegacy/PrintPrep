@@ -19,7 +19,7 @@ exactly what will print in Phase 2 (same drawing code).
 | Quick tab (default) | Colour / grayscale, photos per sheet, orientation, fit, margins (default **None**), print quality (follows colour: Standard ↔ Ink saver, changeable), copies, **sides (one side / both sides)**, and **Save as PDF** / **Save as images**. The share menu opens automatically after saving. |
 | Layout | 1, 2, 4, 6, 8, 9, 12, 16, 20, 32 per sheet; passport 35×45 mm and stamp 25×30 mm sheets; auto / portrait / landscape; repeat one photo to fill a sheet; gap; borders; cut lines |
 | Fit | Fit to frame / fill frame (crop); auto-rotate to match the frame; scale 25–200 %; margins default / minimum / none / custom |
-| Per item | Tap a photo on the sheet (or in the strip). **Position** mode: drag to move, pinch to zoom, **twist with two fingers to rotate** (snaps to straight within 3°) or use the *Rotate by hand* slider, **double-tap to reset** size, position and angle. **Crop** mode: drag corners, edges or the whole box. Rotate, flip, copies, move earlier / later, remove. Bottom buttons: **Cancel** (red, undo everything), **Reset** (blue), **Done** (green) |
+| Per item | Tap a photo on the sheet (or in the strip). **Position** mode: drag to move, pinch to zoom, twist with two fingers to turn a quarter turn, **double-tap to reset** size and position. **Rotate** bar with four positions: 0°, 90°, 180°, 270°. **Crop** mode: drag corners, edges or the whole box. Copies and **Delete**. Bottom buttons: **Cancel** (red, undo everything), **Reset** (blue), **Done** (green) |
 | Paper & quality | A4 or 4×6; plain / glossy / matte / other photo; Ink saver → Best photo (stored for Phase 2) |
 | Colour | Colour, grayscale, black-ink-only, B&W document; brightness and contrast |
 | Pages | All / odd / even / custom range (`1-5, 8, 11-13`); copies 1–99; collate; manual two-sided (long / short edge) with the pass-1 / pass-2 order shown |
@@ -48,7 +48,7 @@ Tick each on the vivo T5x:
 - [ ] Share a **link from Chrome** → the page loads → *Add pages* → pages appear
 - [ ] Every layout (1–32, passport, stamp) shows the right grid; in the saved PDF the page is **A4** and photos aren't stretched
 - [ ] Fit vs fill and a manual crop look the **same** in the preview and the saved PDF
-- [ ] Twist a photo to about 10°, check the angle label; double-tap resets it; the saved PDF and the print show the same angle
+- [ ] Rotate bar: 0° / 90° / 180° / 270° each show in the preview, saved PDF and print; a two-finger twist turns a quarter turn
 - [ ] Crop a photo, rotate it, then crop again: the crop stays on the same part of the photo; Cancel brings back the photo as it was before opening the editor
 - [ ] Quick tab: switch to Grayscale → quality becomes Ink saver; back to Colour → Standard; saving opens the share menu
 - [ ] Original quality: one 12 MP photo, 1 per sheet → Save as PDF → zoom in fully in a PDF viewer: as sharp as the original in Gallery; PDF size about the same as the photo file
