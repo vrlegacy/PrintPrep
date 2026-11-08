@@ -16,7 +16,7 @@ exactly what will print in Phase 2 (same drawing code).
 | Area | Features |
 |---|---|
 | Getting files in | Share from any app (Gallery, WhatsApp, Files, Chrome…): one or many images, PDFs, web links. Also "Open with", and Pick photos / Pick files / Print a web page on Home. New shares are added to the current job. |
-| Quick tab (default) | Colour / grayscale, photos per sheet, orientation, fit, margins (default **None**), print quality (follows colour: Standard ↔ Ink saver, changeable), copies, and **Save as PDF** / **Save as images**. The share menu opens automatically after saving. |
+| Quick tab (default) | Colour / grayscale, photos per sheet, orientation, fit, margins (default **None**), print quality (follows colour: Standard ↔ Ink saver, changeable), copies, **sides (one side / both sides)**, and **Save as PDF** / **Save as images**. The share menu opens automatically after saving. |
 | Layout | 1, 2, 4, 6, 8, 9, 12, 16, 20, 32 per sheet; passport 35×45 mm and stamp 25×30 mm sheets; auto / portrait / landscape; repeat one photo to fill a sheet; gap; borders; cut lines |
 | Fit | Fit to frame / fill frame (crop); auto-rotate to match the frame; scale 25–200 %; margins default / minimum / none / custom |
 | Per item | Tap a photo on the sheet (or in the strip). **Position** mode: drag to move, pinch to zoom, **twist with two fingers to rotate** (snaps to straight within 3°) or use the *Rotate by hand* slider, **double-tap to reset** size, position and angle. **Crop** mode: drag corners, edges or the whole box. Rotate, flip, copies, move earlier / later, remove. Bottom buttons: **Cancel** (red, undo everything), **Reset** (blue), **Done** (green) |

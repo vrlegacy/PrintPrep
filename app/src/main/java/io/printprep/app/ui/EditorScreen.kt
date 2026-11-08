@@ -305,6 +305,14 @@ private fun QuickPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
     ChoiceChips("Print quality", Quality.entries, s.quality, { it.label }) { q -> vm.update { it.copy(quality = q) } }
     Hint("Follows colour: Standard for colour, Ink saver for grayscale. You can change it.")
     Stepper("Copies", s.copies, 1, 99) { v -> vm.update { it.copy(copies = v) } }
+    ChoiceChips("Sides", listOf(false, true), s.duplex != Duplex.OFF, { if (it) "Both sides" else "One side" }) { both ->
+        vm.update {
+            it.copy(duplex = if (!both) Duplex.OFF else if (it.duplex == Duplex.OFF) Duplex.LONG_EDGE else it.duplex)
+        }
+    }
+    if (s.duplex != Duplex.OFF) {
+        Hint("The G2010 can't print both sides by itself: PrintPrep prints the fronts, then shows you how to flip the stack for the backs. Flip direction (long or short edge) is in the Pages tab.")
+    }
 
     val canSave = plan.sheets.isNotEmpty() && !vm.exporting && !vm.importing
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
