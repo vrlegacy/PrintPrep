@@ -374,7 +374,7 @@ private fun PaperPanel(vm: JobViewModel, s: PrintSettings) {
         }
     }
     ChoiceChips("Quality", Quality.entries, s.quality, { it.label }) { q -> vm.update { it.copy(quality = q) } }
-    Hint("Ink use: ${s.quality.inkHint}. Paper type and quality are sent to the printer in Phase 2; saved PDFs are always full quality.")
+    Hint("Ink use: ${s.quality.inkHint}. On photo paper the Canon driver always uses its photo modes, so Ink saver and black-only only make a difference on plain paper. Saved PDFs are always full quality.")
 }
 
 @Composable

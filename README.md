@@ -66,3 +66,36 @@ Note anything that fails, with a screenshot, and send it to me.
 - No printing yet: the Print button is disabled until Phase 2.
 - The job isn't saved when the app is closed (Phase 4).
 - Web pages are captured as images, so their text isn't selectable in the PDF.
+
+
+---
+
+# Phase 2: printing to the Canon G2010 over USB
+
+**How it works:** pages are drawn by the same code as the preview and the PDF, turned into Canon printer data by
+**Gutenprint 5.3.5** (open source, GPL; driver `bjc-G2000-series`, the closest model to the G2010, which is known to work with it),
+and sent over the OTG cable, one printer job per page. Gutenprint is cross-compiled for Android automatically in the GitHub build
+(`native/`), so the APK from GitHub includes it. CI also runs all 82 setting combinations the app can produce through the driver.
+
+| Setting | Driver option |
+|---|---|
+| Ink saver / Standard / High / Photo / Best photo | `Resolution` 300dpi / 600dpi / 600dpi_high / 600dpi_photo / 600dpi_photohigh(2) |
+| Plain / Glossy / Matte / Other photo | `MediaType` Plain / PhotoPlusGloss2 / PhotopaperMatte / PhotopaperOther |
+| Black ink only, B&W document | `PrintingMode=BW`, `InkType=Gray` (plain paper) |
+| Margins None on photo paper | `FullBleed` (borderless) |
+
+On plain paper the printer can't print to the very edge, so a sheet with no margins is shrunk slightly (about 3 %) into the printable area instead of being cut off.
+
+## Phase 2 test checklist (needs the OTG cable)
+
+- [ ] Plug in the printer → Android offers to open PrintPrep → tick **Always** → the Home card turns green ("Connected over USB · ready")
+- [ ] Home → **Printer diagnostics** → USB details and Device ID show the G2010; **Print test page** prints colour bars, grey steps and text
+- [ ] (Optional) Diagnostics → **Send a raw .prn file** with Canon's own Windows "print to file" output
+- [ ] Print 1 photo, 1 per sheet, plain paper, Standard: matches the PDF/preview
+- [ ] 12 photos, 4 per sheet on glossy A4, Photo quality: matches the saved PDF
+- [ ] Ink saver + Grayscale on plain paper: visibly lighter, black ink only
+- [ ] A 5-page PDF with "Print last page first" on: page 1 ends on top of the stack
+- [ ] Two-sided: run the **setup test** once (2 sheets), answer the two questions; then a 6-page and a 5-page PDF come out in the right order and orientation
+- [ ] Unplug the cable mid-job: a clear message, no crash; replug and print again works
+- [ ] Out of paper: a clear "Out of paper" message
+- [ ] 20 jobs in a row without a failure
