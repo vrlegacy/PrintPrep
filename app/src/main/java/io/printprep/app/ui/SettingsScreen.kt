@@ -55,12 +55,12 @@ fun SettingsScreen(vm: JobViewModel) {
                         "Check for updates when the app opens",
                         vm.checkUpdatesOnOpen,
                         "Shows a banner on the Home screen when a new version is out",
-                    ) { vm.setCheckUpdatesOnOpen(it) }
+                    ) { vm.changeCheckUpdatesOnOpen(it) }
                     SwitchRow(
                         "Auto-update",
                         vm.autoUpdate,
                         "Downloads new versions by itself. Android still asks you before installing.",
-                    ) { vm.setAutoUpdate(it) }
+                    ) { vm.changeAutoUpdate(it) }
                     UpdateStatus(vm)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(

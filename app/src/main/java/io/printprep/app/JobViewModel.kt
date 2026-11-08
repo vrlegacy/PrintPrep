@@ -275,12 +275,12 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     val currentBuild: Int get() = io.printprep.app.update.Updater.currentBuild(getApplication())
 
-    fun setCheckUpdatesOnOpen(on: Boolean) {
+    fun changeCheckUpdatesOnOpen(on: Boolean) {
         checkUpdatesOnOpen = on
         prefs.edit().putBoolean("checkUpdatesOnOpen", on).apply()
     }
 
-    fun setAutoUpdate(on: Boolean) {
+    fun changeAutoUpdate(on: Boolean) {
         autoUpdate = on
         prefs.edit().putBoolean("autoUpdate", on).apply()
         if (on) (update as? UpdateState.Available)?.let { downloadAndInstall() }
