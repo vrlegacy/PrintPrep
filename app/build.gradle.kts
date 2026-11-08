@@ -17,8 +17,10 @@ android {
         applicationId = "io.printprep.app"
         minSdk = 33          // Android 13+
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2-phase2"
+        // Every GitHub build gets a higher number, so Android always accepts it as an update.
+        val build = (System.getenv("GITHUB_RUN_NUMBER") ?: "0").toInt()
+        versionCode = 100 + build
+        versionName = "0.2.$build"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -29,9 +31,30 @@ android {
         }
     }
 
+    // One fixed key for every build. Without it each CI run signs with a new random key and Android
+    // refuses to install the new APK over the old one. The key is never in the repo: CI writes it from
+    // the SIGNING_KEYSTORE_BASE64 / SIGNING_PASSWORD secrets to a temp file and passes its path here.
+    val keystorePath = System.getenv("SIGNING_KEYSTORE_FILE")
+    val keystorePassword = System.getenv("SIGNING_PASSWORD")
+    val hasFixedKey = !keystorePath.isNullOrBlank() && !keystorePassword.isNullOrBlank() && file(keystorePath).exists()
+    if (hasFixedKey) {
+        signingConfigs {
+            create("printprep") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "printprep"
+                keyPassword = keystorePassword
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (hasFixedKey) signingConfig = signingConfigs.getByName("printprep")
+        }
         release {
             isMinifyEnabled = false
+            if (hasFixedKey) signingConfig = signingConfigs.getByName("printprep")
         }
     }
 
