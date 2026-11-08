@@ -118,3 +118,17 @@ Home → **Karnataka land records (RTC)** opens https://landrecords.karnataka.go
 
 - [ ] Land records: fill the form, view the RTC, Capture screen → it appears in the print job and prints/saves correctly
 - [ ] Long-press an image on the site → Add to print / Save to gallery both work
+
+
+## App updates
+
+Each GitHub build is published on Releases. The app checks
+`github.com/vrlegacy/PrintPrep/releases/latest` (the repository must be **public**) and, when a newer build exists:
+
+- shows an **Update available** banner on Home: **Update** downloads it and opens Android's install screen; **Not now** hides it until a newer build appears
+- **Settings** (gear on Home): *Check for updates when the app opens* (on by default), *Auto-update* (downloads by itself; Android still asks before installing), **Check now**, and a shortcut to allow PrintPrep to install updates
+- updates only install over the existing app when every build is signed with the same key, so the `SIGNING_KEYSTORE_BASE64` / `SIGNING_PASSWORD` secrets must be set
+
+- [ ] With a newer release published: the Home banner appears; Update → download progress → Android asks → app updates and keeps its settings
+- [ ] Not now hides the banner until a newer build; turning off "Check for updates" stops the banner
+- [ ] Auto-update on: the download starts by itself when the app opens

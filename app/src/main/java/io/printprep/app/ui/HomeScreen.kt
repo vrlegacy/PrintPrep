@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -54,7 +55,13 @@ fun HomeScreen(vm: JobViewModel) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Spacer(Modifier.height(24.dp))
-            Text("PrintPrep", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("PrintPrep", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                androidx.compose.material3.IconButton(onClick = { vm.openSettings() }) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Settings, contentDescription = "Settings")
+                }
+            }
+            UpdateBanner(vm)
             Text(
                 "Share photos, PDFs or links from any app — or pick them here. Lay them out, then save as PDF or images.",
                 style = MaterialTheme.typography.bodyLarge,

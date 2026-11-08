@@ -38,6 +38,18 @@ sealed interface Screen {
     data class EditItem(val itemId: Long) : Screen
     data class Web(val url: String) : Screen
     data object Diagnostics : Screen
+    data object Settings : Screen
+}
+
+/** App update status, shown in the Home banner and on the Settings screen. */
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data object UpToDate : UpdateState
+    data class Available(val release: io.printprep.app.update.Release) : UpdateState
+    data class Downloading(val release: io.printprep.app.update.Release, val fraction: Float) : UpdateState
+    data class Installing(val release: io.printprep.app.update.Release) : UpdateState
+    data class Failed(val message: String) : UpdateState
 }
 
 class JobViewModel(app: Application) : AndroidViewModel(app) {
@@ -205,6 +217,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
             is Screen.EditItem -> Screen.Editor
             is Screen.Web -> if (items.isEmpty()) Screen.Home else Screen.Editor
             Screen.Diagnostics -> if (items.isEmpty()) Screen.Home else Screen.Editor
+            Screen.Settings -> Screen.Home
             else -> Screen.Home
         }
     }
@@ -238,6 +251,102 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openDiagnostics() {
         screen = Screen.Diagnostics
+    }
+
+    fun openSettings() {
+        screen = Screen.Settings
+    }
+
+    // ---------------- app updates ----------------
+
+    var update by mutableStateOf<UpdateState>(UpdateState.Idle)
+        private set
+
+    /** Check GitHub for a new version each time the app opens. */
+    var checkUpdatesOnOpen by mutableStateOf(prefs.getBoolean("checkUpdatesOnOpen", true))
+        private set
+
+    /** Download new versions automatically; Android still asks before installing. */
+    var autoUpdate by mutableStateOf(prefs.getBoolean("autoUpdate", false))
+        private set
+
+    /** The build the user said "Not now" to; its banner stays hidden. */
+    private var dismissedBuild = prefs.getInt("dismissedBuild", 0)
+
+    val currentBuild: Int get() = io.printprep.app.update.Updater.currentBuild(getApplication())
+
+    fun setCheckUpdatesOnOpen(on: Boolean) {
+        checkUpdatesOnOpen = on
+        prefs.edit().putBoolean("checkUpdatesOnOpen", on).apply()
+    }
+
+    fun setAutoUpdate(on: Boolean) {
+        autoUpdate = on
+        prefs.edit().putBoolean("autoUpdate", on).apply()
+        if (on) (update as? UpdateState.Available)?.let { downloadAndInstall() }
+    }
+
+    /** Called once per app start. */
+    fun onAppOpened() {
+        if (checkUpdatesOnOpen) checkForUpdate(fromUser = false)
+    }
+
+    /** Whether the Home banner should show for the current state. */
+    val showUpdateBanner: Boolean
+        get() = when (val u = update) {
+            is UpdateState.Available -> u.release.build != dismissedBuild
+            is UpdateState.Downloading, is UpdateState.Installing -> true
+            else -> false
+        }
+
+    fun checkForUpdate(fromUser: Boolean) {
+        if (update is UpdateState.Checking || update is UpdateState.Downloading) return
+        update = UpdateState.Checking
+        viewModelScope.launch {
+            val r = runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    io.printprep.app.update.Updater.checkForUpdate(getApplication())
+                }
+            }
+            update = r.fold(
+                onSuccess = { rel -> if (rel == null) UpdateState.UpToDate else UpdateState.Available(rel) },
+                onFailure = { e -> if (fromUser) UpdateState.Failed(e.message ?: "Couldn't check for updates.") else UpdateState.Idle },
+            )
+            val u = update
+            if (u is UpdateState.Available && autoUpdate && (fromUser || u.release.build != dismissedBuild)) downloadAndInstall()
+        }
+    }
+
+    /** "Not now": hide the banner for this version (a newer one will show again). */
+    fun dismissUpdate() {
+        (update as? UpdateState.Available)?.let {
+            dismissedBuild = it.release.build
+            prefs.edit().putInt("dismissedBuild", dismissedBuild).apply()
+        }
+        update = UpdateState.Idle
+    }
+
+    fun downloadAndInstall() {
+        val release = (update as? UpdateState.Available)?.release ?: return
+        val app = getApplication<Application>()
+        if (!io.printprep.app.update.Updater.canInstall(app)) {
+            message = "To update, allow PrintPrep to install apps. The settings screen opens next; switch it on, come back and tap Update again."
+            io.printprep.app.update.Updater.openInstallPermission(app)
+            return
+        }
+        update = UpdateState.Downloading(release, 0f)
+        viewModelScope.launch {
+            val r = runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val apk = io.printprep.app.update.Updater.download(app, release) { f -> update = UpdateState.Downloading(release, f) }
+                    io.printprep.app.update.Updater.install(app, apk)
+                }
+            }
+            update = r.fold(
+                onSuccess = { UpdateState.Installing(release) },
+                onFailure = { e -> UpdateState.Failed(e.message ?: "The update couldn't be downloaded.") },
+            )
+        }
     }
 
     override fun onCleared() {

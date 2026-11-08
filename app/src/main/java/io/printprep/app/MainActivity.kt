@@ -28,7 +28,10 @@ class MainActivity : ComponentActivity() {
         WebView.enableSlowWholeDocumentDraw()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) handleIntent(intent)
+        if (savedInstanceState == null) {
+            handleIntent(intent)
+            vm.onAppOpened()
+        }
         setContent { AppTheme { App(vm) } }
     }
 
@@ -88,6 +91,7 @@ private fun App(vm: JobViewModel) {
         is Screen.EditItem -> ItemEditScreen(vm, screen.itemId)
         is Screen.Web -> WebCaptureScreen(vm, screen.url)
         Screen.Diagnostics -> io.printprep.app.ui.DiagnosticsScreen(vm)
+        Screen.Settings -> io.printprep.app.ui.SettingsScreen(vm)
     }
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(vm.pendingShare) {
