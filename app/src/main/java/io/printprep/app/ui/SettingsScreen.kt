@@ -28,13 +28,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.printprep.app.JobViewModel
 import io.printprep.app.UpdateState
-import io.printprep.app.update.InstallResultReceiver
-import io.printprep.app.update.Updater
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: JobViewModel) {
-    val context = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -56,21 +53,12 @@ fun SettingsScreen(vm: JobViewModel) {
                         vm.checkUpdatesOnOpen,
                         "Shows a banner on the Home screen when a new version is out",
                     ) { vm.changeCheckUpdatesOnOpen(it) }
-                    SwitchRow(
-                        "Auto-update",
-                        vm.autoUpdate,
-                        "Downloads new versions by itself. Android still asks you before installing.",
-                    ) { vm.changeAutoUpdate(it) }
                     UpdateStatus(vm)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { vm.checkForUpdate(fromUser = true) },
-                            enabled = vm.update !is UpdateState.Checking && vm.update !is UpdateState.Downloading,
-                        ) { Text("Check now") }
-                        if (!Updater.canInstall(context)) {
-                            TextButton(onClick = { Updater.openInstallPermission(context) }) { Text("Allow installing updates") }
-                        }
-                    }
+                    OutlinedButton(
+                        onClick = { vm.checkForUpdate(fromUser = true) },
+                        enabled = vm.update !is UpdateState.Checking,
+                    ) { Text("Check now") }
+                    Hint("Update opens the new version in your browser; tap the finished download to install it.")
                 }
             }
             Text("Printer", style = MaterialTheme.typography.titleMedium)
@@ -93,16 +81,8 @@ fun UpdateStatus(vm: JobViewModel) {
         is UpdateState.Available -> {
             Text("${u.release.name} is available.", style = MaterialTheme.typography.bodyMedium)
             if (u.release.notes.isNotBlank()) Hint(u.release.notes)
-            Button(onClick = { vm.downloadAndInstall() }) { Text("Update now") }
+            Button(onClick = { vm.downloadAndInstall() }) { Text("Download update") }
         }
-        is UpdateState.Downloading -> {
-            Text("Downloading build ${u.release.build}… ${(u.fraction * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
-            LinearProgressIndicator(progress = { u.fraction }, modifier = Modifier.fillMaxWidth())
-        }
-        is UpdateState.Installing -> Text(
-            InstallResultReceiver.lastResult ?: "Android will ask you to confirm the update.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
         is UpdateState.Failed -> Text(u.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
 }

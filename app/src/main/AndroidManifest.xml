@@ -4,9 +4,6 @@
     <!-- Only for loading web pages shared as links. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- In-app updates: download the new APK and hand it to Android's installer (the user confirms). -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-
     <!-- USB printing over an OTG cable; the app still installs on phones without USB host. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
@@ -62,9 +59,5 @@
                 <data android:mimeType="application/pdf" />
             </intent-filter>
         </activity>
-
-        <receiver
-            android:name=".update.InstallResultReceiver"
-            android:exported="false" />
     </application>
 </manifest>

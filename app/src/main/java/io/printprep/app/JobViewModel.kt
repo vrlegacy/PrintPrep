@@ -47,8 +47,6 @@ sealed interface UpdateState {
     data object Checking : UpdateState
     data object UpToDate : UpdateState
     data class Available(val release: io.printprep.app.update.Release) : UpdateState
-    data class Downloading(val release: io.printprep.app.update.Release, val fraction: Float) : UpdateState
-    data class Installing(val release: io.printprep.app.update.Release) : UpdateState
     data class Failed(val message: String) : UpdateState
 }
 
@@ -266,10 +264,6 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     var checkUpdatesOnOpen by mutableStateOf(prefs.getBoolean("checkUpdatesOnOpen", true))
         private set
 
-    /** Download new versions automatically; Android still asks before installing. */
-    var autoUpdate by mutableStateOf(prefs.getBoolean("autoUpdate", false))
-        private set
-
     /** The build the user said "Not now" to; its banner stays hidden. */
     private var dismissedBuild = prefs.getInt("dismissedBuild", 0)
 
@@ -278,12 +272,6 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     fun changeCheckUpdatesOnOpen(on: Boolean) {
         checkUpdatesOnOpen = on
         prefs.edit().putBoolean("checkUpdatesOnOpen", on).apply()
-    }
-
-    fun changeAutoUpdate(on: Boolean) {
-        autoUpdate = on
-        prefs.edit().putBoolean("autoUpdate", on).apply()
-        if (on) (update as? UpdateState.Available)?.let { downloadAndInstall() }
     }
 
     /** Called once per app start. */
@@ -295,12 +283,11 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     val showUpdateBanner: Boolean
         get() = when (val u = update) {
             is UpdateState.Available -> u.release.build != dismissedBuild
-            is UpdateState.Downloading, is UpdateState.Installing -> true
             else -> false
         }
 
     fun checkForUpdate(fromUser: Boolean) {
-        if (update is UpdateState.Checking || update is UpdateState.Downloading) return
+        if (update is UpdateState.Checking) return
         update = UpdateState.Checking
         viewModelScope.launch {
             val r = runCatching {
@@ -312,8 +299,6 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
                 onSuccess = { rel -> if (rel == null) UpdateState.UpToDate else UpdateState.Available(rel) },
                 onFailure = { e -> if (fromUser) UpdateState.Failed(e.message ?: "Couldn't check for updates.") else UpdateState.Idle },
             )
-            val u = update
-            if (u is UpdateState.Available && autoUpdate && (fromUser || u.release.build != dismissedBuild)) downloadAndInstall()
         }
     }
 
@@ -326,27 +311,11 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         update = UpdateState.Idle
     }
 
+    /** Opens the new version's APK in the browser; the user installs it from the download. */
     fun downloadAndInstall() {
         val release = (update as? UpdateState.Available)?.release ?: return
-        val app = getApplication<Application>()
-        if (!io.printprep.app.update.Updater.canInstall(app)) {
-            message = "To update, allow PrintPrep to install apps. The settings screen opens next; switch it on, come back and tap Update again."
-            io.printprep.app.update.Updater.openInstallPermission(app)
-            return
-        }
-        update = UpdateState.Downloading(release, 0f)
-        viewModelScope.launch {
-            val r = runCatching {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val apk = io.printprep.app.update.Updater.download(app, release) { f -> update = UpdateState.Downloading(release, f) }
-                    io.printprep.app.update.Updater.install(app, apk)
-                }
-            }
-            update = r.fold(
-                onSuccess = { UpdateState.Installing(release) },
-                onFailure = { e -> UpdateState.Failed(e.message ?: "The update couldn't be downloaded.") },
-            )
-        }
+        io.printprep.app.update.Updater.openDownload(getApplication(), release)
+        message = "Your browser is downloading PrintPrep build ${release.build}. When it finishes, tap the download and choose Install (or Update)."
     }
 
     override fun onCleared() {
