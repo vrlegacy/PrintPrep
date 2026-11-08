@@ -196,7 +196,7 @@ object LayoutEngine {
     /** User rotation, plus 90° when auto-rotate is on and the item's shape doesn't match the cell's. */
     fun effectiveRotation(item: JobItem, cell: MmRect, s: PrintSettings): Int {
         var r = ((item.edit.rotation % 360) + 360) % 360
-        if (s.autoRotate) {
+        if (s.autoRotate && !item.edit.manualRotation) {
             val (w, h) = rotatedSize(item, r)
             val itemLandscape = w > h * 1.02f
             val itemPortrait = h > w * 1.02f

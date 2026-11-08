@@ -48,7 +48,7 @@ Tick each on the vivo T5x:
 - [ ] Share a **link from Chrome** → the page loads → *Add pages* → pages appear
 - [ ] Every layout (1–32, passport, stamp) shows the right grid; in the saved PDF the page is **A4** and photos aren't stretched
 - [ ] Fit vs fill and a manual crop look the **same** in the preview and the saved PDF
-- [ ] Rotate bar: 0° / 90° / 180° / 270° each show in the preview, saved PDF and print; a two-finger twist turns a quarter turn
+- [ ] Rotate bar on a portrait and on a landscape photo: each of 0° / 90° / 180° / 270° turns it exactly that way (auto-rotate no longer interferes once you rotate); same in the saved PDF and print; a two-finger twist turns a quarter turn
 - [ ] Crop a photo, rotate it, then crop again: the crop stays on the same part of the photo; Cancel brings back the photo as it was before opening the editor
 - [ ] Quick tab: switch to Grayscale → quality becomes Ink saver; back to Colour → Standard; saving opens the share menu
 - [ ] Original quality: one 12 MP photo, 1 per sheet → Save as PDF → zoom in fully in a PDF viewer: as sharp as the original in Gallery; PDF size about the same as the photo file

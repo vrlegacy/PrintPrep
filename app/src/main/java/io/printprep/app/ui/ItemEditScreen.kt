@@ -155,7 +155,7 @@ fun ItemEditScreen(vm: JobViewModel, itemId: Long) {
                 val b = src
                 when {
                     b == null -> CircularProgressIndicator()
-                    mode == EditMode.CROP -> CropView(b, item.edit, paint) { newEdit -> vm.updateEdit(itemId, newEdit) }
+                    mode == EditMode.CROP -> CropView(b, item.edit, rotation, paint) { newEdit -> vm.updateEdit(itemId, newEdit) }
                     else -> PositionView(b, item.edit, cellAspect, rotation, s.fit, s.scalePercent, paint, itemId) { change -> edit(change) }
                 }
             }
@@ -185,10 +185,11 @@ fun ItemEditScreen(vm: JobViewModel, itemId: Long) {
                     }
                 }
                 // rotation: four positions only
-                val quarter = ((item.edit.rotation % 360 + 360) % 360) / 90
+                // the angle as it appears (including any auto-rotate), so each stop turns the photo exactly that way
+                val quarter = ((rotation % 360 + 360) % 360) / 90
                 SliderRow("Rotate", quarter.toFloat(), 0f..3f, "${quarter * 90}°", steps = 2) { v ->
                     val q = Math.round(v).coerceIn(0, 3)
-                    if (q != quarter) edit { it.copy(rotation = q * 90, angle = 0f, offsetX = 0f, offsetY = 0f) }
+                    if (q != quarter) edit { it.copy(rotation = q * 90, manualRotation = true, angle = 0f, offsetX = 0f, offsetY = 0f) }
                 }
                 // copies + delete on one line
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -250,7 +251,8 @@ private fun PositionView(
                             zoom = (it.zoom * zoom).coerceIn(0.2f, 6f),
                             offsetX = if (step != 0) 0f else (it.offsetX + pan.x / size.width).coerceIn(-1f, 1f),
                             offsetY = if (step != 0) 0f else (it.offsetY + pan.y / size.height).coerceIn(-1f, 1f),
-                            rotation = (it.rotation + step) % 360,
+                            rotation = if (step != 0) (rotation + step) % 360 else it.rotation,
+                            manualRotation = it.manualRotation || step != 0,
                             angle = 0f,
                         )
                     }
@@ -301,8 +303,8 @@ private data class NRect(val l: Float, val t: Float, val r: Float, val b: Float)
  * stored in the upright image's own coordinates, so the crop survives later rotations.
  */
 @Composable
-private fun CropView(bmp: Bitmap, edit: ItemEdit, paint: Paint, onChange: (ItemEdit) -> Unit) {
-    val rot = ((edit.rotation % 360) + 360) % 360
+private fun CropView(bmp: Bitmap, edit: ItemEdit, rotation: Int, paint: Paint, onChange: (ItemEdit) -> Unit) {
+    val rot = ((rotation % 360) + 360) % 360
     val turned = rot % 180 != 0
     val aspect = if (turned) bmp.height.toFloat() / bmp.width else bmp.width.toFloat() / bmp.height
     val current by rememberUpdatedState(edit)
