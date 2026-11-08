@@ -100,6 +100,10 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     /** Short status line shown at the bottom of the browser ("Added 2 pages to print"). */
     var webNotice by mutableStateOf<String?>(null)
 
+    /** True while the browser is downloading a picked image or a site download. */
+    var webBusy by mutableStateOf(false)
+        private set
+
     /** The part of the page currently on screen, as one image. Main thread. */
     fun captureVisible(web: WebView, title: String) {
         if (web.width <= 0 || web.height <= 0) return
@@ -122,7 +126,9 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun fetchFromWeb(url: String, userAgent: String?, referer: String?, toGallery: Boolean) {
         webNotice = "Downloading…"
+        webBusy = true
         viewModelScope.launch {
+          try {
             val dir = java.io.File(getApplication<Application>().cacheDir, "web")
             val result = runCatching {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -144,6 +150,9 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
                     webNotice = if (n > 0) "Added to print · ${items.size} item(s) in the job" else "That file couldn't be opened."
                 }
             }
+          } finally {
+            webBusy = false
+          }
         }
     }
 

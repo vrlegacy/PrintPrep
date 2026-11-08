@@ -111,7 +111,9 @@ Home → **Karnataka land records (RTC)** opens https://landrecords.karnataka.go
 - **Capture screen**: what's on screen now, as one image; **Full page**: the whole page split into printable pages
 - **Long-press an image** → *Add to print* or *Save to gallery* (downloaded with the page's own session, so it works after filling the form)
 - Files the site downloads (PDF or image) are added to the print job automatically
-- **Desktop site** switch for sites that only work well in desktop layout; Back goes back inside the site
+- Compact **navigation bar at the bottom** (above the print bar): back, forward, **home** (land records), a small address/search field
+  (type an address, or words to search the web), refresh and **desktop site**; a thin loading line shows while pages or downloads load
+- The phone's Back key goes back inside the site; ✕ at the top closes the browser
 - **Print (n)** jumps to the print screen with everything you've collected
 
 - [ ] Land records: fill the form, view the RTC, Capture screen → it appears in the print job and prints/saves correctly
