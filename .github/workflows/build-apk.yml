@@ -57,9 +57,15 @@ jobs:
           KEY_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_B64" ] && [ -n "$KEY_PASSWORD" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/printprep.jks"
-            echo "SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/printprep.jks" >> "$GITHUB_ENV"
-            echo "Signing with the PrintPrep key from secrets"
+            # Check the key really opens with the password before using it; otherwise build with a temporary key.
+            if echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/printprep.jks" 2>/dev/null \
+               && keytool -list -keystore "$RUNNER_TEMP/printprep.jks" -storepass "$KEY_PASSWORD" -alias printprep >/dev/null 2>&1; then
+              echo "SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/printprep.jks" >> "$GITHUB_ENV"
+              echo "Signing with the PrintPrep key from secrets"
+            else
+              rm -f "$RUNNER_TEMP/printprep.jks"
+              echo "::warning::The signing secrets don't form a valid key (wrong key text or password). Building with a temporary key instead."
+            fi
           else
             echo "::warning::No signing secrets set: this APK uses a temporary key and won't install over earlier builds."
           fi
