@@ -10,6 +10,7 @@ import io.printprep.app.engine.Sheet
 import io.printprep.app.engine.SheetRenderer
 import io.printprep.app.model.JobItem
 import io.printprep.app.model.PrintSettings
+import io.printprep.app.model.PrintTone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -81,6 +82,8 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
         val geometry = PageGeometry(pageWpt, pageHpt, leftPt, topPt, areaWpt, areaHpt, dpi, DriverSettings.borderless(s), rotate180)
         var lastStatus: CanonStatus? = null
         var confirmed = 0
+        // Tone matching chosen in Settings (the colour-match sheet itself is printed unchanged).
+        val tone = s.toneOverride ?: PrintTone.saved(context)
         var noBackChannel = false
 
         // Page i's share of the bar: 0–15 % drawing, 15–35 % sending, 35–100 % the printer printing it.
@@ -89,7 +92,7 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
         /** Draws page [i] and turns it into Canon printer data. */
         fun render(i: Int): File {
             val sheet = sheets[i]
-            val source = BandRenderer(sheet, s, cache, geometry, wPx, isCancelled) { row ->
+            val source = BandRenderer(sheet, s, cache, geometry, wPx, isCancelled, tone) { row ->
                 if (i == confirmed) onProgress(PrintProgress(i + 1, total, "Preparing", frac(i, 0.15f * row / hPx), printed = confirmed))
             }
             val file = File(context.cacheDir, "print_page_${i + 1}.prn")
@@ -254,6 +257,7 @@ class BandRenderer(
     private val g: PageGeometry,
     private val width: Int,
     private val isCancelled: () -> Boolean,
+    private val tone: PrintTone = PrintTone.A,
     private val onRow: (Int) -> Unit,
 ) : RowSource {
 
@@ -275,6 +279,7 @@ class BandRenderer(
         if (bandStart < 0 || row < bandStart || row >= bandStart + BAND) render(row - row % BAND)
         band.getPixels(pixels, 0, width, 0, row - bandStart, width, 1)
         var o = 0
+        if (!tone.isIdentity) for (i in pixels.indices) pixels[i] = tone.apply(pixels[i])
         for (p in pixels) {
             out[o++] = (p shr 16).toByte()
             out[o++] = (p shr 8).toByte()

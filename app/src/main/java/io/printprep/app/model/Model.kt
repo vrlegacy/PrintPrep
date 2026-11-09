@@ -115,6 +115,8 @@ data class PrintSettings(
     val color: ColorMode = ColorMode.COLOR,
     val brightness: Float = 0f, // -0.5 .. 0.5
     val contrast: Float = 1f,   // 0.5 .. 2
+    /** Print-only tone; null = the one chosen in Settings (see [PrintTone]). */
+    val toneOverride: PrintTone? = null,
     // Pages
     val pageSet: PageSet = PageSet.ALL,
     val pageRange: String = "",

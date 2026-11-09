@@ -27,6 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.printprep.app.JobViewModel
+import io.printprep.app.print.PrintUi
+import io.printprep.app.print.PrinterState
+import io.printprep.app.model.ItemKind
+import io.printprep.app.model.PrintTone
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import io.printprep.app.UpdateState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,6 +72,61 @@ fun SettingsScreen(vm: JobViewModel) {
             Text("Printer", style = MaterialTheme.typography.titleMedium)
             PrinterStatusCard(vm)
             OutlinedButton(onClick = { vm.openDiagnostics() }, modifier = Modifier.fillMaxWidth()) { Text("Printer diagnostics & test page") }
+
+            Text("Print colour", style = MaterialTheme.typography.titleMedium)
+            PrintColourCard(vm)
+        }
+    }
+}
+
+/**
+ * Tone matching for printing only. "A · No change" sends the picture exactly as it is; B–F lift
+ * midtones / calm colours to undo ink spreading on paper. Chosen from a printed A–F sheet.
+ */
+@Composable
+private fun PrintColourCard(vm: JobViewModel) {
+    val context = LocalContext.current
+    val ctl = vm.print
+    var tone by remember { mutableStateOf(PrintTone.saved(context)) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "Prints come out a little darker and stronger than on screen because ink spreads into paper. " +
+                    "Print the colour match sheet, find the panel closest to your original, and pick its letter.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            ChoiceChips("Tone used for printing", PrintTone.entries, tone, { it.letter }) { t ->
+                tone = t
+                PrintTone.save(context, t)
+            }
+            Text("${tone.letter} · ${tone.label}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            val ready = ctl.printer.state is PrinterState.Ready && !ctl.busy
+            Button(
+                onClick = {
+                    ctl.printColourMatch(
+                        vm.items.firstOrNull { it.kind == ItemKind.IMAGE },
+                        vm.settings.quality,
+                        vm.settings.paperType,
+                    )
+                },
+                enabled = ready,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Print colour match sheet") }
+            Hint(
+                "Uses the first photo in your current job (or a built-in chart) and your current paper and quality, " +
+                    "so print it with the settings you normally use. Only printing changes: previews, PDFs and saved images stay exactly as they are.",
+            )
+            when (val ui = ctl.ui) {
+                is PrintUi.Running -> {
+                    Text("${ui.label}: ${ui.stage} ${(ui.fraction * 100).toInt()}%")
+                    ui.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    LinearProgressIndicator(progress = { ui.fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                    OutlinedButton(onClick = { ctl.cancel() }) { Text("Cancel") }
+                }
+                is PrintUi.Done -> Text(ui.message, color = MaterialTheme.colorScheme.primary)
+                is PrintUi.Failed -> Text(ui.message, color = MaterialTheme.colorScheme.error)
+                else -> {}
+            }
         }
     }
 }

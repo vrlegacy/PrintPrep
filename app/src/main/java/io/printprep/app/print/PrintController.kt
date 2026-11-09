@@ -13,6 +13,7 @@ import io.printprep.app.model.ColorMode
 import io.printprep.app.model.Duplex
 import io.printprep.app.model.FitMode
 import io.printprep.app.model.ItemKind
+import io.printprep.app.model.JobItem
 import io.printprep.app.model.MarginPreset
 import io.printprep.app.model.PrintSettings
 import io.printprep.app.model.Quality
@@ -164,6 +165,27 @@ class PrintController private constructor(private val app: Application, private 
                 store.saveBitmapItem(bmp, "Test page", ItemKind.WEB_PAGE).also { bmp.recycle() }
             }
             val s = PrintSettings(margin = MarginPreset.DEFAULT, quality = Quality.STANDARD, lastPageFirst = false)
+            print(LayoutEngine.plan(listOf(item), s), s)
+        }
+    }
+
+    /**
+     * Prints the colour-match sheet (see [TestPages.colourMatch]) on the paper and quality the user
+     * prints with, using [photo] from their job if there is one. The sheet is printed without tone.
+     */
+    fun printColourMatch(photo: JobItem?, quality: Quality, paperType: io.printprep.app.model.PaperType) {
+        if (busy) return
+        scope.launch {
+            val item = withContext(Dispatchers.Default) {
+                val pic = photo?.let { runCatching { store.decode(it, 900, useCache = false) }.getOrNull() }
+                val bmp = TestPages.colourMatch(pic)
+                pic?.recycle()
+                store.saveBitmapItem(bmp, "Colour match", ItemKind.WEB_PAGE).also { bmp.recycle() }
+            }
+            val s = PrintSettings(
+                margin = MarginPreset.DEFAULT, quality = quality, paperType = paperType,
+                lastPageFirst = false, toneOverride = io.printprep.app.model.PrintTone.A,
+            )
             print(LayoutEngine.plan(listOf(item), s), s)
         }
     }
