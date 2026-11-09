@@ -89,7 +89,7 @@ static int run(const char *page, const char *media, const char *res, int bw, int
     stp_set_string_parameter(v, "InkType", bw ? "Gray" : "CMYK");
     stp_set_string_parameter(v, "InputImageType", "RGB");
     stp_set_string_parameter(v, "ChannelBitDepth", "8");
-    stp_set_string_parameter(v, "JobMode", "Page");
+    stp_set_string_parameter(v, "JobMode", "Job");
     stp_set_boolean_parameter(v, "FullBleed", bleed);
     fill_defaults(v);
     stp_set_outfunc(v, out);
@@ -102,10 +102,15 @@ static int run(const char *page, const char *media, const char *res, int bw, int
     rep_t rep = { (int) ((r - l) / 72 * 75), (int) ((b - t) / 72 * 75) }; /* 75 dpi image keeps the test fast */
     stp_image_t im = { im_noop, im_noop, im_w, im_h, im_row, im_app, im_noop, &rep };
     g_bytes = 0;
-    int ok = stp_verify(v) && stp_print(v, &im);
-    printf("%-4s %-16s %-22s %-5s bleed=%d area=%.0f,%.0f-%.0f,%.0f -> %s %zu bytes head=%02x %02x %02x %02x\n",
+    int ok = stp_verify(v);
+    if (ok) {
+        ok = stp_start_job(v, &im);       /* Canon G-series XML start-of-job block */
+        if (ok) ok = stp_print(v, &im);
+        stp_end_job(v, &im);              /* end-of-job block */
+    }
+    printf("%-4s %-16s %-22s %-5s bleed=%d area=%.0f,%.0f-%.0f,%.0f -> %s %zu bytes head=%02x %02x %02x %02x %02x (%.5s)\n",
            page, media, res, bw ? "BW" : "Color", bleed, l, t, r, b, ok ? "OK  " : "FAIL", g_bytes,
-           g_head[0], g_head[1], g_head[2], g_head[3]);
+           g_head[0], g_head[1], g_head[2], g_head[3], g_head[4], (const char *) g_head);
     stp_vars_destroy(v);
     return ok;
 }

@@ -52,6 +52,12 @@ fun DiagnosticsScreen(vm: JobViewModel) {
     val printer = ctl.printer
     var details by remember { mutableStateOf("") }
     var driver by remember { mutableStateOf("Checking…") }
+    val saveData = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val f = ctl.lastReport?.dataFile
+        if (uri != null && f != null && f.exists()) scope.launch(Dispatchers.IO) {
+            runCatching { context.contentResolver.openOutputStream(uri)?.use { o -> f.inputStream().use { it.copyTo(o) } } }
+        }
+    }
     val pickRaw = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) ctl.sendRawFile(uri) }
 
     fun reload() {
@@ -102,6 +108,37 @@ fun DiagnosticsScreen(vm: JobViewModel) {
                 }
             }
             OutlinedButton(onClick = { reload() }, modifier = Modifier.fillMaxWidth()) { Text("Refresh") }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Last print job", style = MaterialTheme.typography.titleSmall)
+                    val r = ctl.lastReport
+                    if (r == null) {
+                        Text("Nothing sent yet in this session.", style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        Text(
+                            buildString {
+                                appendLine("Pages sent: ${r.pages}")
+                                appendLine("Bytes sent: ${r.bytes}")
+                                appendLine("Data starts: ${r.header}")
+                                append("Printer after: ${r.statusAfter?.let { "0x%02X · %s".format(it.raw, it.summary) } ?: "(not reported)"}")
+                            },
+                            fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+                        )
+                        if (!r.header.startsWith("<?xml")) {
+                            Text(
+                                "This data doesn't begin with the Canon job header the G2010 expects, so the printer may ignore it.",
+                                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (r.dataFile != null) {
+                            OutlinedButton(onClick = { saveData.launch("printprep-page1.prn") }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Save page 1 printer data (.prn)")
+                            }
+                        }
+                    }
+                }
+            }
 
             val ready = printer.state is PrinterState.Ready && !ctl.busy
             Button(onClick = { ctl.printTestPage() }, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text("Print test page") }

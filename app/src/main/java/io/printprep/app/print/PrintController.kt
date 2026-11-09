@@ -45,6 +45,10 @@ class PrintController(private val app: Application, private val store: ImageStor
     var ui by mutableStateOf<PrintUi>(PrintUi.Idle)
         private set
 
+    /** The most recent job that reached the printer (shown in Printer diagnostics). */
+    var lastReport by mutableStateOf<JobReport?>(null)
+        private set
+
     private var pendingBacks: Pending? = null
 
     private data class Pending(val sheets: List<Sheet>, val settings: PrintSettings, val rotate: Boolean, val isSetupTest: Boolean, val total: Int)
@@ -69,17 +73,17 @@ class PrintController(private val app: Application, private val store: ImageStor
         val two = plan.twoSided
         if (two == null) {
             val order = if (s.lastPageFirst) plan.sheets.reversed() else plan.sheets
-            run(order, s, rotate = false, label = "Printing") {
-                ui = PrintUi.Done("Printed ${plan.sheets.size} page(s).")
+            run(order, s, rotate = false, label = "Printing") { r ->
+                ui = PrintUi.Done(sentMessage(r))
             }
             return
         }
         val byNumber = plan.sheets.associateBy { it.number }
         val fronts = two.pass1.mapNotNull { byNumber[it] }
         val backs = two.pass2.mapNotNull { byNumber[it] }
-        run(fronts, s, rotate = false, label = "Pass 1 of 2 · fronts") {
+        run(fronts, s, rotate = false, label = "Pass 1 of 2 · fronts") { r ->
             if (backs.isEmpty()) {
-                ui = if (isSetupTest) PrintUi.SetupQuestions else PrintUi.Done("Printed ${plan.sheets.size} page(s).")
+                ui = if (isSetupTest) PrintUi.SetupQuestions else PrintUi.Done(sentMessage(r))
             } else {
                 pendingBacks = Pending(backs, s, two.rotateBacks, isSetupTest, plan.sheets.size)
                 ui = PrintUi.WaitingFlip(two.pass2, two.keepAside, isSetupTest)
@@ -91,8 +95,8 @@ class PrintController(private val app: Application, private val store: ImageStor
     fun continueAfterFlip() {
         val p = pendingBacks ?: return
         pendingBacks = null
-        run(p.sheets, p.settings, rotate = p.rotate, label = "Pass 2 of 2 · backs") {
-            ui = if (p.isSetupTest) PrintUi.SetupQuestions else PrintUi.Done("Printed ${p.total} page(s) on both sides.")
+        run(p.sheets, p.settings, rotate = p.rotate, label = "Pass 2 of 2 · backs") { r ->
+            ui = if (p.isSetupTest) PrintUi.SetupQuestions else PrintUi.Done(sentMessage(r) + " Both sides are done.")
         }
     }
 
@@ -163,16 +167,26 @@ class PrintController(private val app: Application, private val store: ImageStor
 
     fun close() = printer.close()
 
-    private fun run(sheets: List<Sheet>, s: PrintSettings, rotate: Boolean, label: String, onDone: () -> Unit) {
+    private fun sentMessage(r: JobReport): String =
+        "Sent ${r.pages} page(s) to the printer (%.1f MB). It should start printing within a few seconds. ".format(r.bytes / 1_048_576.0) +
+            "If nothing happens, open Printer diagnostics → Last print job."
+
+    private fun run(sheets: List<Sheet>, s: PrintSettings, rotate: Boolean, label: String, onDone: (JobReport) -> Unit) {
         cancelFlag.set(false)
         ui = PrintUi.Running(label, 0, sheets.size, "Starting", 0f)
         scope.launch {
             try {
-                runner.printSheets(sheets, s, rotate, { p ->
+                val report = runner.printSheets(sheets, s, rotate, { p ->
                     ui = PrintUi.Running(label, p.page, p.total, p.stage, p.fraction)
                 }) { cancelFlag.get() }
+                lastReport = report
                 printer.refresh()
-                onDone()
+                onDone(report)
+            } catch (e: PrinterReportedProblem) {
+                lastReport = e.report
+                pendingBacks = null
+                printer.refresh()
+                ui = PrintUi.Failed(e.message ?: "The printer reports a problem.")
             } catch (e: PrintCancelled) {
                 pendingBacks = null
                 ui = PrintUi.Failed("Printing cancelled. The page being printed may come out unfinished.")

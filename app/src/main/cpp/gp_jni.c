@@ -253,7 +253,12 @@ Java_io_printprep_app_print_Gutenprint_nativePrintPage(
         size_t cur = strlen(g_err);
         snprintf(g_err + cur, sizeof(g_err) - cur, "%sThe driver rejected these settings.", cur ? " " : "");
     } else {
-        ok = stp_print(v, &image);
+        /* JobMode=Job: we frame each page as its own job. The Canon G-series needs the XML
+         * start-of-job block, which Gutenprint only sends from stp_start_job(); in Page mode it
+         * sends the end block but never the start, and the printer silently ignores the data. */
+        ok = stp_start_job(v, &image);
+        if (ok) ok = stp_print(v, &image);
+        stp_end_job(v, &image);
     }
     fclose(f);
     stp_vars_destroy(v);

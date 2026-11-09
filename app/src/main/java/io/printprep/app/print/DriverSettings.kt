@@ -43,7 +43,7 @@ object DriverSettings {
             add("InkType" to if (blackInk) "Gray" else "CMYK")
             add("InputImageType" to "RGB")
             add("ChannelBitDepth" to "8")
-            add("JobMode" to "Page")
+            add("JobMode" to "Job") // one job per page, framed by stp_start_job / stp_end_job (see gp_jni.c)
             add("FullBleed" to if (borderless(s)) "true" else "false")
         }
     }

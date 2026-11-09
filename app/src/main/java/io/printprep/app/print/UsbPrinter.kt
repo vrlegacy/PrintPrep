@@ -136,8 +136,9 @@ class UsbPrinter(private val context: Context) {
      * Streams a file of raw printer data to the printer. [onProgress] gets bytes sent so far;
      * return false from [shouldContinue] to stop between chunks.
      */
-    fun send(file: File, onProgress: (Long) -> Unit, shouldContinue: () -> Boolean) {
-        withConnection { conn, intf ->
+    /** Sends [file] and returns the number of bytes the printer accepted (always the whole file, or it throws). */
+    fun send(file: File, onProgress: (Long) -> Unit, shouldContinue: () -> Boolean): Long {
+        return withConnection { conn, intf ->
             val out = bulkOut(intf) ?: throw IOException("The printer has no data endpoint.")
             file.inputStream().use { input ->
                 val buf = ByteArray(CHUNK)
@@ -163,6 +164,8 @@ class UsbPrinter(private val context: Context) {
                         }
                     }
                 }
+                if (total != file.length()) throw IOException("Only $total of ${file.length()} bytes reached the printer.")
+                total
             }
         } ?: throw IOException("The printer isn't connected or USB access wasn't allowed.")
     }

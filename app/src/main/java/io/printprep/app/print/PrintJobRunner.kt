@@ -19,6 +19,16 @@ import kotlin.math.roundToInt
 
 class PrintCancelled : IOException("Cancelled")
 
+/** What was actually sent, for the done message and Printer diagnostics. */
+data class JobReport(
+    val pages: Int,
+    val bytes: Long,
+    /** First bytes of page 1's printer data, as text where printable (should start with "<?xml" for the G2010). */
+    val header: String,
+    val statusAfter: PortStatus?,
+    val dataFile: File?,
+)
+
 /** Progress of one pass: [page] is 1-based; [fraction] covers the whole pass. */
 data class PrintProgress(val page: Int, val total: Int, val stage: String, val fraction: Float)
 
@@ -35,7 +45,7 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
         rotate180: Boolean,
         onProgress: (PrintProgress) -> Unit,
         isCancelled: () -> Boolean,
-    ) = withContext(Dispatchers.IO) {
+    ): JobReport = withContext(Dispatchers.IO) {
         Gutenprint.ensureReady(context)?.let { throw IOException(it) }
         if (printer.state !is PrinterState.Ready) throw IOException("The printer isn't ready. Plug it in, switch it on and allow USB access.")
         val options = DriverSettings.options(s)
@@ -50,6 +60,10 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
         val hPx = (areaHpt / 72.0 * dpi).roundToInt()
         val cache = JobBitmaps(store, SheetRenderer.colorFilter(s))
         val total = sheets.size
+
+        var totalBytes = 0L
+        var header = ""
+        val keep = File(context.cacheDir, "last_job_page1.prn").also { it.delete() }
 
         printer.busy = true
         try {
@@ -69,6 +83,12 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
                     val err = Gutenprint.printPage(Gutenprint.G2010_DRIVER, options, wPx, hPx, leftPt, topPt, areaWpt, areaHpt, source, file)
                     if (err == "cancelled" || isCancelled()) throw PrintCancelled()
                     if (err != null) throw IOException(err)
+                    if (file.length() == 0L) throw IOException("The printer driver produced no data for page ${i + 1}.")
+                    if (i == 0) {
+                        header = readHeader(file)
+                        file.copyTo(keep, overwrite = true)
+                    }
+                    totalBytes += file.length()
                     val size = file.length().coerceAtLeast(1)
                     printer.send(file, { sent ->
                         onProgress(PrintProgress(i + 1, total, "Printing", base + step * (0.6f + 0.4f * sent / size)))
@@ -80,13 +100,33 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
                     file.delete()
                 }
             }
-            onProgress(PrintProgress(total, total, "Done", 1f))
+            onProgress(PrintProgress(total, total, "Checking printer", 1f))
         } finally {
             printer.busy = false
             cache.clear()
         }
+        // Give the printer a moment, then ask how it's doing; a reported problem becomes an error, not "done".
+        Thread.sleep(3_000)
+        val after = runCatching { printer.readStatus() }.getOrNull()
+        val report = JobReport(total, totalBytes, header, after, keep.takeIf { it.exists() })
+        if (after != null && (after.paperEmpty || after.error)) {
+            throw PrinterReportedProblem(report, "The data was sent, but the printer reports: ${after.summary}.")
+        }
+        report
+    }
+
+    private fun readHeader(f: File): String {
+        val b = ByteArray(24)
+        val n = f.inputStream().use { it.read(b) }.coerceAtLeast(0)
+        return (0 until n).joinToString("") { i ->
+            val c = b[i].toInt() and 0xFF
+            if (c in 32..126) c.toChar().toString() else "\\x%02x".format(c)
+        }
     }
 }
+
+/** The job was sent but the printer's own status says something is wrong. */
+class PrinterReportedProblem(val report: JobReport, message: String) : IOException(message)
 
 /** Where the drawn sheet goes on the physical page, in points and pixels. */
 data class PageGeometry(
