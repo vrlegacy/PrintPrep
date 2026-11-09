@@ -1,5 +1,15 @@
 package io.printprep.app.ui
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.LinearEasing
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.Uri
@@ -197,78 +207,82 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                 NavIcon(Icons.Filled.Close, "Close browser", true) { vm.back() }
                 Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             }
-            AndroidView(
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.loadWithOverviewMode = true
-                        settings.useWideViewPort = true
-                        settings.builtInZoomControls = true
-                        settings.displayZoomControls = false
-                        settings.setSupportMultipleWindows(false)
-                        settings.cacheMode = WebSettings.LOAD_DEFAULT
-                        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                loading = true
-                                progress = 0f
-                                if (url != null) currentUrl = url
-                            }
-
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                loading = false
-                                if (url != null) currentUrl = url
-                                pageTitle = view?.title.orEmpty()
-                            }
-
-                            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                                canGoBack = view?.canGoBack() == true
-                                canGoForward = view?.canGoForward() == true
-                                if (url != null) currentUrl = url
-                            }
-
-                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
-                        }
-                        webChromeClient = object : android.webkit.WebChromeClient() {
-                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                progress = newProgress / 100f
-                                if (newProgress >= 100) loading = false
-                            }
-
-                            override fun onReceivedTitle(view: WebView?, t: String?) {
-                                pageTitle = t.orEmpty()
-                            }
-                        }
-                        // Files the site downloads (e.g. an RTC as PDF or image) go straight into the print job.
-                        setDownloadListener { url, userAgent, _, _, _ ->
-                            vm.fetchFromWeb(url, userAgent, this.url, toGallery = false)
-                        }
-                        // Long-press on an image: ask what to do with it.
-                        setOnLongClickListener {
-                            val hit = hitTestResult
-                            when (hit.type) {
-                                WebView.HitTestResult.IMAGE_TYPE -> {
-                                    pickedImage = hit.extra
-                                    true
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.loadWithOverviewMode = true
+                            settings.useWideViewPort = true
+                            settings.builtInZoomControls = true
+                            settings.displayZoomControls = false
+                            settings.setSupportMultipleWindows(false)
+                            settings.cacheMode = WebSettings.LOAD_DEFAULT
+                            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                            webViewClient = object : WebViewClient() {
+                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                    loading = true
+                                    progress = 0f
+                                    if (url != null) currentUrl = url
                                 }
-                                WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
-                                    val msg = Handler(Looper.getMainLooper()) { m: Message ->
-                                        pickedImage = m.data.getString("url") ?: hit.extra
+
+                                override fun onPageFinished(view: WebView?, url: String?) {
+                                    loading = false
+                                    if (url != null) currentUrl = url
+                                    pageTitle = view?.title.orEmpty()
+                                }
+
+                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                    canGoBack = view?.canGoBack() == true
+                                    canGoForward = view?.canGoForward() == true
+                                    if (url != null) currentUrl = url
+                                }
+
+                                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+                            }
+                            webChromeClient = object : android.webkit.WebChromeClient() {
+                                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                    progress = newProgress / 100f
+                                    if (newProgress >= 100) loading = false
+                                }
+
+                                override fun onReceivedTitle(view: WebView?, t: String?) {
+                                    pageTitle = t.orEmpty()
+                                }
+                            }
+                            // Files the site downloads (e.g. an RTC as PDF or image) go straight into the print job.
+                            setDownloadListener { url, userAgent, _, _, _ ->
+                                vm.fetchFromWeb(url, userAgent, this.url, toGallery = false)
+                            }
+                            // Long-press on an image: ask what to do with it.
+                            setOnLongClickListener {
+                                val hit = hitTestResult
+                                when (hit.type) {
+                                    WebView.HitTestResult.IMAGE_TYPE -> {
+                                        pickedImage = hit.extra
                                         true
-                                    }.obtainMessage()
-                                    requestImageRef(msg)
-                                    true
+                                    }
+                                    WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                                        val msg = Handler(Looper.getMainLooper()) { m: Message ->
+                                            pickedImage = m.data.getString("url") ?: hit.extra
+                                            true
+                                        }.obtainMessage()
+                                        requestImageRef(msg)
+                                        true
+                                    }
+                                    else -> false
                                 }
-                                else -> false
                             }
+                            loadUrl(toUrl(startUrl))
+                            web = this
                         }
-                        loadUrl(toUrl(startUrl))
-                        web = this
-                    }
-                },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                // Our own loader: a simple ring in the middle over a 70% veil while the page loads.
+                if (loading || vm.webBusy) PageLoader(if (loading && progress >= 0.05f) progress else null)
+            }
         }
     }
 
@@ -302,6 +316,40 @@ private fun NavIcon(icon: ImageVector, label: String, enabled: Boolean, selected
         modifier = Modifier.size(40.dp),
         colors = if (selected) IconButtonDefaults.filledTonalIconButtonColors() else IconButtonDefaults.iconButtonColors(),
     ) { Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp)) }
+}
+
+/**
+ * Page-loading overlay: the page dimmed by a 70% veil, with a ring in the middle showing the load
+ * percentage ([fraction] null = still waiting for the first bytes, so the ring spins). Touches are
+ * blocked while it shows.
+ */
+@Composable
+private fun PageLoader(fraction: Float?) {
+    val ring = MaterialTheme.colorScheme.primary
+    val track = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+    val spin by rememberInfiniteTransition(label = "loader").animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)), label = "spin",
+    )
+    val shown by animateFloatAsState(fraction ?: 0.25f, label = "progress")
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Canvas(Modifier.size(64.dp)) {
+                val stroke = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+                drawArc(track, 0f, 360f, useCenter = false, style = stroke)
+                drawArc(ring, (if (fraction == null) spin else 0f) - 90f, 360f * shown, useCenter = false, style = stroke)
+            }
+            if (fraction != null) {
+                Text("${(fraction * 100).toInt()}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
+    }
 }
 
 /** Small rounded address/search field (much shorter than a standard text field). */
