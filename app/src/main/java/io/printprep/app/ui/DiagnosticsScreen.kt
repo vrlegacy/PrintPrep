@@ -121,7 +121,9 @@ fun DiagnosticsScreen(vm: JobViewModel) {
                                 appendLine("Pages sent: ${r.pages}")
                                 appendLine("Bytes sent: ${r.bytes}")
                                 appendLine("Data starts: ${r.header}")
-                                append("Printer after: ${r.statusAfter?.let { "0x%02X · %s".format(it.raw, it.summary) } ?: "(not reported)"}")
+                                appendLine("Port status after: ${r.statusAfter?.let { "0x%02X · %s".format(it.raw, it.summary) } ?: "(not reported)"}")
+                                appendLine("Printer said: ${r.printerSaid?.let { "${it.status}${if (it.detail.isNotEmpty()) " / ${it.detail}" else ""}${if (it.code.isNotEmpty()) " / code ${it.code}" else ""}" } ?: "(no status replies)"}")
+                                append("Pages confirmed by printer: ${if (r.confirmedByPrinter) "yes" else "no (only sent)"}")
                             },
                             fontFamily = FontFamily.Monospace, fontSize = 12.sp,
                         )

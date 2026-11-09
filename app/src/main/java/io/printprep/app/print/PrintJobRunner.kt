@@ -27,6 +27,10 @@ data class JobReport(
     val header: String,
     val statusAfter: PortStatus?,
     val dataFile: File?,
+    /** Last thing the printer said on its back channel; null if it never answered. */
+    val printerSaid: CanonStatus? = null,
+    /** True when the printer itself reported each page finished; false when we only know it was sent. */
+    val confirmedByPrinter: Boolean = false,
 )
 
 /** Progress of one pass: [page] is 1-based; [fraction] covers the whole pass. */
@@ -37,12 +41,15 @@ data class PrintProgress(
     val fraction: Float,
     /** Something the user should know or do right now (printer out of paper, jammed…); null when all is well. */
     val notice: String? = null,
+    /** Pages the printer has confirmed as printed (or, without a back channel, fully sent). */
+    val printed: Int = 0,
 )
 
 /**
  * Prints sheets on the USB printer: each sheet is drawn in horizontal strips (the same drawing
  * code as the preview and the PDF), turned into Canon printer data by Gutenprint, then sent over USB.
- * One printer job per page, which is how the G2010 is known to work with Gutenprint.
+ * One printer job per page; after sending each page we follow the printer's own status until the
+ * page is really printed, so progress, "done" and errors match what the printer is doing.
  */
 class PrintJobRunner(private val context: Context, private val store: ImageStore, private val printer: UsbPrinter) {
 
@@ -71,68 +78,141 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
         var totalBytes = 0L
         var header = ""
         val keep = File(context.cacheDir, "last_job_page1.prn").also { it.delete() }
+        val geometry = PageGeometry(pageWpt, pageHpt, leftPt, topPt, areaWpt, areaHpt, dpi, DriverSettings.borderless(s), rotate180)
+        var lastStatus: CanonStatus? = null
+        var confirmed = 0
+        var noBackChannel = false
+
+        // Page i's share of the bar: 0–15 % drawing, 15–35 % sending, 35–100 % the printer printing it.
+        fun frac(i: Int, sub: Float) = (i + sub.coerceIn(0f, 1f)) / total
+
+        /** Draws page [i] and turns it into Canon printer data. */
+        fun render(i: Int): File {
+            val sheet = sheets[i]
+            val source = BandRenderer(sheet, s, cache, geometry, wPx, isCancelled) { row ->
+                if (i == confirmed) onProgress(PrintProgress(i + 1, total, "Preparing", frac(i, 0.15f * row / hPx), printed = confirmed))
+            }
+            val file = File(context.cacheDir, "print_page_${i + 1}.prn")
+            try {
+                val err = Gutenprint.printPage(Gutenprint.G2010_DRIVER, options, wPx, hPx, leftPt, topPt, areaWpt, areaHpt, source, file)
+                if (err == "cancelled" || isCancelled()) throw PrintCancelled()
+                if (err != null) throw IOException(err)
+            } finally {
+                source.release()
+            }
+            if (file.length() == 0L) throw IOException("The printer driver produced no data for page ${i + 1}.")
+            enableBackChannel(file)
+            return file
+        }
 
         printer.busy = true
         try {
-            sheets.forEachIndexed { i, sheet ->
-                if (isCancelled()) throw PrintCancelled()
-                runCatching { printer.readStatus() }.getOrNull()?.let {
-                    if (it.paperEmpty) throw IOException("Out of paper. Load paper in the rear tray, then print again.")
-                }
-                val base = i.toFloat() / total
-                val step = 1f / total
-                val geometry = PageGeometry(pageWpt, pageHpt, leftPt, topPt, areaWpt, areaHpt, dpi, DriverSettings.borderless(s), rotate180)
-                val source = BandRenderer(sheet, s, cache, geometry, wPx, isCancelled) { row ->
-                    onProgress(PrintProgress(i + 1, total, "Preparing", base + step * 0.6f * row / hPx))
-                }
-                val file = File(context.cacheDir, "print_page_${i + 1}.prn")
-                try {
-                    val err = Gutenprint.printPage(Gutenprint.G2010_DRIVER, options, wPx, hPx, leftPt, topPt, areaWpt, areaHpt, source, file)
-                    if (err == "cancelled" || isCancelled()) throw PrintCancelled()
-                    if (err != null) throw IOException(err)
-                    if (file.length() == 0L) throw IOException("The printer driver produced no data for page ${i + 1}.")
-                    if (i == 0) {
-                        header = readHeader(file)
-                        file.copyTo(keep, overwrite = true)
-                    }
-                    totalBytes += file.length()
-                    val size = file.length().coerceAtLeast(1)
-                    var lastFraction = base + step * 0.6f
-                    printer.send(
-                        file,
-                        onProgress = { sent ->
-                            lastFraction = base + step * (0.6f + 0.4f * sent / size)
-                            onProgress(PrintProgress(i + 1, total, "Printing", lastFraction))
-                        },
-                        shouldContinue = { !isCancelled() },
-                        onStall = { st, secs ->
-                            onProgress(PrintProgress(i + 1, total, "Printing", lastFraction, stallNotice(st, secs)))
-                        },
-                    )
-                } catch (e: UsbPrinter.CancelledException) {
-                    throw PrintCancelled()
-                } finally {
-                    source.release()
-                    file.delete()
-                }
+            runCatching { printer.readStatus() }.getOrNull()?.let {
+                if (it.paperEmpty) throw IOException("Out of paper. Load paper in the rear tray, then print again.")
             }
-            onProgress(PrintProgress(total, total, "Checking printer", 1f))
+            printer.session { session ->
+                var next: File? = render(0)
+                for (i in 0 until total) {
+                    if (isCancelled()) throw PrintCancelled()
+                    val file = next!!
+                    next = null
+                    try {
+                        if (i == 0) {
+                            header = readHeader(file)
+                            file.copyTo(keep, overwrite = true)
+                        }
+                        totalBytes += file.length()
+                        val size = file.length().coerceAtLeast(1)
+                        var sendFrac = 0.15f
+                        session.send(
+                            file,
+                            onProgress = { sent ->
+                                sendFrac = 0.15f + 0.2f * sent / size
+                                onProgress(PrintProgress(i + 1, total, "Sending", frac(i, sendFrac), printed = confirmed))
+                            },
+                            shouldContinue = { !isCancelled() },
+                            onStall = { st, port, secs ->
+                                if (st != null) lastStatus = st
+                                onProgress(PrintProgress(i + 1, total, "Sending", frac(i, sendFrac), stallNotice(st, port, secs), printed = confirmed))
+                            },
+                        )
+                    } catch (e: UsbPrinter.CancelledException) {
+                        throw PrintCancelled()
+                    } finally {
+                        file.delete()
+                    }
+
+                    // While the printer prints this page, draw the next one so it's ready right after.
+                    onProgress(PrintProgress(i + 1, total, "Printing", frac(i, 0.35f), null, printed = confirmed))
+                    if (i + 1 < total) next = render(i + 1)
+
+                    val result = if (noBackChannel) UsbPrinter.WaitResult.NoBackChannel else try {
+                        session.waitUntilPrinted({ !isCancelled() }) { st, secs ->
+                            if (st != null) lastStatus = st
+                            // No page counter from the printer, so creep towards the end of this page's share.
+                            val creep = 0.35f + 0.6f * (1f - 1f / (1f + secs / 20f))
+                            onProgress(PrintProgress(i + 1, total, "Printing", frac(i, creep), st?.problem, printed = confirmed))
+                        }
+                    } catch (e: UsbPrinter.CancelledException) {
+                        throw PrintCancelled()
+                    }
+                    when (result) {
+                        UsbPrinter.WaitResult.StoppedOnPrinter -> throw IOException(
+                            "Printing was stopped on the printer after page ${i + 1} of $total. Pages ${i + 2}–$total weren't printed.".let {
+                                if (i + 1 >= total) "Printing was stopped on the printer." else it
+                            },
+                        )
+                        UsbPrinter.WaitResult.NoBackChannel -> noBackChannel = true
+                        else -> {}
+                    }
+                    confirmed = i + 1
+                    onProgress(PrintProgress(minOf(i + 2, total), total, "Printing", frac(i, 1f), printed = confirmed))
+                }
+                if (noBackChannel) {
+                    // The printer never answered: we only know the data was sent.
+                    sleepQuietly(3_000)
+                }
+                Unit
+            }
+            onProgress(PrintProgress(total, total, "Checking printer", 1f, printed = confirmed))
         } finally {
             printer.busy = false
             cache.clear()
         }
-        // Give the printer a moment, then ask how it's doing; a reported problem becomes an error, not "done".
-        Thread.sleep(3_000)
         val after = runCatching { printer.readStatus() }.getOrNull()
-        val report = JobReport(total, totalBytes, header, after, keep.takeIf { it.exists() })
+        val report = JobReport(total, totalBytes, header, after, keep.takeIf { it.exists() }, lastStatus, confirmedByPrinter = !noBackChannel)
         if (after != null && (after.paperEmpty || after.error)) {
             throw PrinterReportedProblem(report, "The data was sent, but the printer reports: ${after.summary}.")
         }
         report
     }
 
+    private fun sleepQuietly(ms: Long) = try { Thread.sleep(ms) } catch (_: InterruptedException) {}
+
+    /**
+     * Gutenprint's Canon job header says <ivec:bidi>0</ivec:bidi>, which turns off the printer's
+     * status replies for the job. Flip it to 1 in place (same length) so we can follow the printer.
+     */
+    private fun enableBackChannel(f: File) {
+        val off = "<ivec:bidi>0</ivec:bidi>".toByteArray()
+        java.io.RandomAccessFile(f, "rw").use { raf ->
+            val n = minOf(4096L, raf.length()).toInt()
+            val head = ByteArray(n)
+            raf.readFully(head)
+            var i = 0
+            while (i <= n - off.size) {
+                if ((off.indices).all { head[i + it] == off[it] }) {
+                    raf.seek((i + off.size - "</ivec:bidi>".length - 1).toLong())
+                    raf.write('1'.code)
+                    i += off.size
+                } else i++
+            }
+        }
+    }
+
     /** What to tell the user while the printer isn't taking data. Short pauses are normal (it's printing). */
-    private fun stallNotice(st: PortStatus?, secs: Int): String? = when {
+    private fun stallNotice(canon: CanonStatus?, st: PortStatus?, secs: Int): String? = when {
+        canon?.problem != null -> canon.problem
         st == null && secs == 0 -> null
         st?.paperEmpty == true -> "The printer is out of paper. Load paper in the rear tray, then press the printer's Resume/Stop button — printing carries on."
         st?.error == true -> "The printer reports a problem (paper jam, cover open or ink). Fix it, then press the printer's Resume/Stop button — printing carries on."

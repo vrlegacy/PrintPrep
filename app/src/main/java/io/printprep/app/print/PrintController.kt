@@ -34,9 +34,9 @@ sealed interface PrintUi {
         val stage: String,
         val fraction: Float,
         val notice: String? = null,
+        /** Pages the printer has finished in this pass. */
+        val done: Int = 0,
     ) : PrintUi {
-        /** Pages fully sent so far in this pass. */
-        val done: Int get() = if (stage == "Checking printer") total else (page - 1).coerceAtLeast(0)
         val remaining: Int get() = (total - done).coerceAtLeast(0)
     }
     /** Fronts are done: the user flips the stack, then continues. */
@@ -183,7 +183,11 @@ class PrintController private constructor(private val app: Application, private 
                     val size = tmp.length().coerceAtLeast(1)
                     printer.busy = true
                     try {
-                        printer.send(tmp, { sent -> ui = PrintUi.Running("Sending file", 1, 1, "Sending", sent.toFloat() / size) }) { !cancelFlag.get() }
+                        printer.send(
+                            tmp,
+                            onProgress = { sent -> ui = PrintUi.Running("Sending file", 1, 1, "Sending", sent.toFloat() / size) },
+                            shouldContinue = { !cancelFlag.get() },
+                        )
                     } finally {
                         printer.busy = false
                     }
@@ -201,12 +205,12 @@ class PrintController private constructor(private val app: Application, private 
 
     /** After a cancel or failure: drop any half-sent page from the printer's USB buffer. */
     private suspend fun clearPrinter() = withContext(Dispatchers.IO) {
-        runCatching { printer.softReset() }
+        printer.cancelOnPrinter()
         printer.refresh()
     }
 
     private fun sentMessage(r: JobReport): String =
-        "Sent ${r.pages} page(s) to the printer (%.1f MB). It should start printing within a few seconds. ".format(r.bytes / 1_048_576.0) +
+        if (r.confirmedByPrinter) "Printed ${r.pages} page(s). The printer confirmed each one." else "Sent ${r.pages} page(s) to the printer (%.1f MB). It should start printing within a few seconds. ".format(r.bytes / 1_048_576.0) +
             "If nothing happens, open Printer diagnostics → Last print job."
 
     private fun run(sheets: List<Sheet>, s: PrintSettings, rotate: Boolean, label: String, onDone: (JobReport) -> Unit) {
@@ -216,7 +220,7 @@ class PrintController private constructor(private val app: Application, private 
         scope.launch {
             try {
                 val report = runner.printSheets(sheets, s, rotate, { p ->
-                    ui = PrintUi.Running(label, p.page, p.total, p.stage, p.fraction, p.notice)
+                    ui = PrintUi.Running(label, p.page, p.total, p.stage, p.fraction, p.notice, p.printed)
                 }) { cancelFlag.get() }
                 lastReport = report
                 printer.refresh()

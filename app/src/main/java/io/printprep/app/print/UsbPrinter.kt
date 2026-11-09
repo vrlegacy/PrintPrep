@@ -149,16 +149,55 @@ class UsbPrinter(private val context: Context) {
         onProgress: (Long) -> Unit,
         shouldContinue: () -> Boolean,
         onStall: (status: PortStatus?, seconds: Int) -> Unit = { _, _ -> },
-    ): Long {
-        return withConnection { conn, intf ->
-            val out = bulkOut(intf) ?: throw IOException("The printer has no data endpoint.")
-            // One queued request per chunk, waited on in short slices. Unlike bulkTransfer() with a
-            // timeout, a slow printer never makes us abandon a half-delivered chunk and send it
-            // again (which corrupted the page data and left the printer stuck).
+    ): Long = session { it.send(file, onProgress, shouldContinue) { _, port, secs -> onStall(port, secs) } }
+
+    /**
+     * Opens the printer for a whole job: data goes out on the bulk OUT endpoint while a background
+     * thread reads the printer's own status replies from bulk IN (see [CanonStatus]).
+     */
+    fun <T> session(block: (Session) -> T): T =
+        withConnection { conn, intf -> Session(conn, intf).use(block) }
+            ?: throw IOException("The printer isn't connected or USB access wasn't allowed.")
+
+    inner class Session internal constructor(private val conn: UsbDeviceConnection, private val intf: UsbInterface) : java.io.Closeable {
+        private val out: UsbEndpoint = bulkOut(intf) ?: throw IOException("The printer has no data endpoint.")
+        private val inEp: UsbEndpoint? = bulkIn(intf)
+        val decoder = CanonStatusDecoder()
+        @Volatile private var running = true
+        private val reader: Thread? = inEp?.let { ep ->
+            Thread({
+                val b = ByteArray(4096)
+                while (running) {
+                    val n = conn.bulkTransfer(ep, b, b.size, 500)
+                    if (n > 0) {
+                        decoder.feed(b, n)
+                        if (n < b.size) sleepQuietly(700)
+                    } else sleepQuietly(200)
+                }
+            }, "printer-status").apply { isDaemon = true; start() }
+        }
+
+        val hasBackChannel: Boolean get() = inEp != null
+        val latest: CanonStatus? get() = decoder.latest
+
+        fun portStatus(): PortStatus? = runCatching { readPort(conn, intf) }.getOrNull()
+
+        /**
+         * Streams [file]. One queued request per chunk, waited on in short slices: unlike bulkTransfer()
+         * with a timeout, a slow printer never makes us abandon a half-delivered chunk and send it again
+         * (which corrupted the page data and left the printer stuck). While the printer isn't taking
+         * data, [onStall] gets what it reports (null/0 once it moves again).
+         */
+        fun send(
+            file: File,
+            onProgress: (Long) -> Unit,
+            shouldContinue: () -> Boolean,
+            onStall: (CanonStatus?, PortStatus?, Int) -> Unit,
+        ): Long {
             val req = UsbRequest()
             if (!req.initialize(conn, out)) throw IOException("Couldn't open the printer's data channel.")
             try {
-                file.inputStream().use { input ->
+                return file.inputStream().use { input ->
                     val buf = ByteArray(CHUNK)
                     var total = 0L
                     while (true) {
@@ -169,29 +208,21 @@ class UsbPrinter(private val context: Context) {
                         if (!req.queue(ByteBuffer.wrap(buf, 0, read))) throw IOException("The printer refused the data.")
                         var stalledSince = 0L
                         while (true) {
-                            val done = try {
-                                conn.requestWait(STALL_TIMEOUT_MS.toLong())
-                            } catch (_: TimeoutException) {
-                                null
-                            }
+                            val done = try { conn.requestWait(STALL_TIMEOUT_MS.toLong()) } catch (_: TimeoutException) { null }
                             if (done === req) break
                             if (done != null) continue
-                            // Still waiting: the printer isn't taking data right now.
                             if (!stillAttached()) throw IOException("The printer was disconnected while printing.")
-                            if (!shouldContinue()) {
-                                req.cancel()
-                                throw CancelledException()
-                            }
+                            if (!shouldContinue()) { req.cancel(); throw CancelledException() }
                             val now = System.currentTimeMillis()
                             if (stalledSince == 0L) stalledSince = now
                             val secs = ((now - stalledSince) / 1000).toInt() + STALL_TIMEOUT_MS / 1000
-                            onStall(runCatching { portStatus(conn, intf) }.getOrNull(), secs)
+                            onStall(latest, portStatus(), secs)
                             if (secs >= MAX_STALL_S) {
                                 req.cancel()
                                 throw IOException("The printer hasn't taken any data for ${MAX_STALL_S / 60} minutes, so printing was stopped.")
                             }
                         }
-                        if (stalledSince != 0L) onStall(null, 0)
+                        if (stalledSince != 0L) onStall(null, null, 0)
                         total += read
                         onProgress(total)
                     }
@@ -200,16 +231,74 @@ class UsbPrinter(private val context: Context) {
             } finally {
                 req.close()
             }
-        } ?: throw IOException("The printer isn't connected or USB access wasn't allowed.")
+        }
+
+        private fun write(text: String) {
+            val b = text.toByteArray(Charsets.UTF_8)
+            conn.bulkTransfer(out, b, b.size, 3_000)
+        }
+
+        /** Only between jobs: a status request inside job data would corrupt it. */
+        fun askStatus() = write(CanonStatus.GET_STATUS)
+
+        /**
+         * After a page's data is sent: waits until the printer has actually finished it. The printer
+         * keeps a whole page in memory and may report "idle" for a few seconds before it starts, so
+         * idle only counts once it has been busy (or after 30 s with no activity at all).
+         */
+        fun waitUntilPrinted(shouldContinue: () -> Boolean, onState: (CanonStatus?, Int) -> Unit): WaitResult {
+            if (inEp == null) return WaitResult.NoBackChannel
+            val start = System.currentTimeMillis()
+            var busy = false
+            var hadProblem = false
+            var asked = 0L
+            while (true) {
+                if (!shouldContinue()) throw CancelledException()
+                if (!stillAttached()) throw IOException("The printer was disconnected while printing.")
+                val now = System.currentTimeMillis()
+                val secs = ((now - start) / 1000).toInt()
+                val st = latest?.takeIf { it.at >= start }
+                onState(st, secs)
+                if (st != null) {
+                    val problem = st.problem != null
+                    if (!st.idle) busy = true
+                    if (problem) hadProblem = true
+                    // Problem, then straight to idle without printing again: someone pressed Stop on the printer.
+                    if (st.idle && hadProblem && !problem) return WaitResult.StoppedOnPrinter
+                    if (st.idle && !problem && (busy || secs >= 30)) return WaitResult.Printed
+                    if (!problem && secs >= 15 * 60) return WaitResult.Printed
+                } else if (secs >= 30 && !decoder.everAnswered) {
+                    return WaitResult.NoBackChannel
+                }
+                if (now - asked >= 3_000) { askStatus(); asked = now }
+                sleepQuietly(1_000)
+            }
+        }
+
+        /**
+         * Ends the job on the printer (verified approach for Canon IVEC printers): soft reset to drop
+         * queued data, CancelJob so it stops waiting, then soft reset again because after CancelJob the
+         * printer ignores everything until reset.
+         */
+        fun cancelOnPrinter() {
+            softReset()
+            runCatching { write(CanonStatus.CANCEL_JOB) }
+            sleepQuietly(2_000)
+            softReset()
+        }
+
+        fun softReset(): Boolean = conn.controlTransfer(REQTYPE_OUT_CLASS_INTERFACE, REQ_SOFT_RESET, 0, intf.id, null, 0, 3_000) >= 0
+
+        override fun close() {
+            running = false
+            reader?.join(1_500)
+        }
     }
 
-    /**
-     * USB printer-class SOFT_RESET: drops whatever is still queued in the printer's USB buffer, so a
-     * half-sent page doesn't sit there and get mixed up with the next job. Best effort.
-     */
-    fun softReset(): Boolean = withConnection { conn, intf ->
-        conn.controlTransfer(REQTYPE_OUT_CLASS_INTERFACE, REQ_SOFT_RESET, 0, intf.id, null, 0, 3_000) >= 0
-    } ?: false
+    enum class WaitResult { Printed, NoBackChannel, StoppedOnPrinter }
+
+    /** Clears a stuck or half-sent job from the printer. Best effort. */
+    fun cancelOnPrinter(): Boolean = runCatching { session { it.cancelOnPrinter() }; true }.getOrDefault(false)
 
     private fun stillAttached(): Boolean {
         val d = device ?: return false
@@ -234,7 +323,7 @@ class UsbPrinter(private val context: Context) {
         }
     }
 
-    private fun portStatus(conn: UsbDeviceConnection, intf: UsbInterface): PortStatus? {
+    private fun readPort(conn: UsbDeviceConnection, intf: UsbInterface): PortStatus? {
         val buf = ByteArray(1)
         val n = conn.controlTransfer(REQTYPE_IN_CLASS_INTERFACE, REQ_GET_PORT_STATUS, 0, intf.id shl 8, buf, 1, 2_000)
         return if (n == 1) PortStatus(buf[0].toInt() and 0xFF) else null
@@ -268,6 +357,11 @@ class UsbPrinter(private val context: Context) {
             (0 until d.interfaceCount).map { d.getInterface(it) }
                 .filter { it.interfaceClass == UsbConstants.USB_CLASS_PRINTER && it.interfaceProtocol != 4 && bulkOut(it) != null }
                 .minByOrNull { if (it.interfaceProtocol == 2) 0 else 1 }
+
+        private fun sleepQuietly(ms: Long) = try { Thread.sleep(ms) } catch (_: InterruptedException) {}
+
+        private fun bulkIn(intf: UsbInterface): UsbEndpoint? = (0 until intf.endpointCount).map { intf.getEndpoint(it) }
+            .firstOrNull { it.type == UsbConstants.USB_ENDPOINT_XFER_BULK && it.direction == UsbConstants.USB_DIR_IN }
 
         private fun bulkOut(intf: UsbInterface): UsbEndpoint? = (0 until intf.endpointCount).map { intf.getEndpoint(it) }
             .firstOrNull { it.type == UsbConstants.USB_ENDPOINT_XFER_BULK && it.direction == UsbConstants.USB_DIR_OUT }
