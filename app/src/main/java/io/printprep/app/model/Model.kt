@@ -24,7 +24,7 @@ enum class Quality(val label: String, val inkHint: String) {
 
 enum class ColorMode(val label: String) {
     COLOR("Colour"),
-    GRAYSCALE("Grayscale"),
+    GRAYSCALE("Black and white"),
     BLACK_ONLY("Black ink only"),
     BW_DOCUMENT("B&W document"),
 }

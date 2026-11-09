@@ -303,7 +303,7 @@ private fun QuickPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
         }
     }
     ChoiceChips("Print quality", Quality.entries, s.quality, { it.label }) { q -> vm.update { it.copy(quality = q) } }
-    Hint("Follows colour: Standard for colour, Ink saver for grayscale. You can change it.")
+    Hint("Follows colour: Standard for colour, Ink saver for black and white. You can change it.")
     Stepper("Copies", s.copies, 1, 99) { v -> vm.update { it.copy(copies = v) } }
     ChoiceChips("Sides", listOf(false, true), s.duplex != Duplex.OFF, { if (it) "Both sides" else "One side" }) { both ->
         vm.update {
@@ -388,7 +388,7 @@ private fun PaperPanel(vm: JobViewModel, s: PrintSettings) {
 @Composable
 private fun ColourPanel(vm: JobViewModel, s: PrintSettings) {
     ChoiceChips("Colour", ColorMode.entries, s.color, { it.label }) { c -> vm.setColor(c) }
-    if (s.color == ColorMode.BLACK_ONLY) Hint("Previews in grayscale. When printing (Phase 2) only the black ink is used.")
+    if (s.color == ColorMode.BLACK_ONLY) Hint("Previews in black and white. When printing, only the black ink is used.")
     SliderRow("Brightness", s.brightness, -0.5f..0.5f, "${(s.brightness * 100).roundToInt()}") { v ->
         vm.update { it.copy(brightness = v) }
     }
