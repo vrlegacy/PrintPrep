@@ -150,7 +150,13 @@ private fun Running(r: PrintUi.Running, onCancel: () -> Unit) {
         style = MaterialTheme.typography.bodyLarge,
     )
     LinearProgressIndicator(progress = { r.fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(8.dp))
-    Hint("Keep the cable connected and the app open until printing finishes.")
+    if (r.page > 0) Text("${r.done} done · ${r.remaining} left", style = MaterialTheme.typography.bodyMedium)
+    r.notice?.let {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+            Text(it, Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+        }
+    }
+    Hint("Keep the cable connected. You can close the app: printing carries on, with progress and Cancel in the notification panel.")
     OutlinedButton(
         onClick = onCancel,
         modifier = Modifier.fillMaxWidth(),
@@ -167,7 +173,7 @@ private fun Flip(f: PrintUi.WaitingFlip, onContinue: () -> Unit, onCancel: () ->
             Text("2. Take the printed stack out, keeping it in the same order.")
             Text("3. Turn it over so the printed side faces you, with the top edge still going in first.")
             Text("4. Put it back in the rear tray and tap Continue.")
-            f.keepAside?.let { Text("Keep sheet $it aside: it has no back page.", fontWeight = FontWeight.SemiBold) }
+            f.blankBackSheet?.let { Text("Put back every sheet, including sheet $it — it just goes through blank.", fontWeight = FontWeight.SemiBold) }
             if (f.isSetupTest) Hint("This is the setup test: just follow these steps; the app learns the right order from your answers next.")
         }
     }

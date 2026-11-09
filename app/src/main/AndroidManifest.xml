@@ -4,6 +4,13 @@
     <!-- Only for loading web pages shared as links. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Print jobs keep running (with a progress notification) after the app is closed. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Normal permission; one of the prerequisites Android 14+ checks for a connected-device service. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
     <!-- USB printing over an OTG cable; the app still installs on phones without USB host. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
@@ -59,5 +66,9 @@
                 <data android:mimeType="application/pdf" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".print.PrintService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

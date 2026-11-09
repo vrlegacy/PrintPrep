@@ -18,6 +18,7 @@ import io.printprep.app.model.PrintSettings
 import io.printprep.app.model.Quality
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -26,17 +27,44 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** What the print sheet shows. */
 sealed interface PrintUi {
     data object Idle : PrintUi
-    data class Running(val label: String, val page: Int, val total: Int, val stage: String, val fraction: Float) : PrintUi
+    data class Running(
+        val label: String,
+        val page: Int,
+        val total: Int,
+        val stage: String,
+        val fraction: Float,
+        val notice: String? = null,
+    ) : PrintUi {
+        /** Pages fully sent so far in this pass. */
+        val done: Int get() = if (stage == "Checking printer") total else (page - 1).coerceAtLeast(0)
+        val remaining: Int get() = (total - done).coerceAtLeast(0)
+    }
     /** Fronts are done: the user flips the stack, then continues. */
-    data class WaitingFlip(val backs: List<Int>, val keepAside: Int?, val isSetupTest: Boolean) : PrintUi
+    data class WaitingFlip(val backs: List<Int>, val blankBackSheet: Int?, val isSetupTest: Boolean) : PrintUi
     /** The setup test has printed: ask the two questions. */
     data object SetupQuestions : PrintUi
     data class Done(val message: String) : PrintUi
     data class Failed(val message: String) : PrintUi
 }
 
-/** Runs print jobs (including manual two-sided and the setup test) and exposes their state to the UI. */
-class PrintController(private val app: Application, private val store: ImageStore, private val scope: CoroutineScope) {
+/**
+ * Runs print jobs (including manual two-sided and the setup test) and exposes their state to the UI.
+ * One per app process ([get]), not per screen, so a job keeps going after the app is closed; the
+ * [PrintService] keeps the process alive and mirrors [ui] in a notification.
+ */
+class PrintController private constructor(private val app: Application, private val store: ImageStore) {
+
+    companion object {
+        @Volatile private var instance: PrintController? = null
+
+        fun get(app: Application, store: ImageStore): PrintController =
+            instance ?: synchronized(this) { instance ?: PrintController(app, store).also { instance = it } }
+
+        /** The running instance, if the app has created one (used by the notification buttons). */
+        fun current(): PrintController? = instance
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val printer = UsbPrinter(app)
     private val runner = PrintJobRunner(app, store, printer)
@@ -80,13 +108,16 @@ class PrintController(private val app: Application, private val store: ImageStor
         }
         val byNumber = plan.sheets.associateBy { it.number }
         val fronts = two.pass1.mapNotNull { byNumber[it] }
-        val backs = two.pass2.mapNotNull { byNumber[it] }
+        val template = plan.sheets.first()
+        val backs = two.pass2.mapNotNull { n ->
+            if (n == io.printprep.app.engine.TwoSidedPlan.BLANK_BACK) Sheet(0, template.paperW, template.paperH, emptyList()) else byNumber[n]
+        }
         run(fronts, s, rotate = false, label = "Pass 1 of 2 · fronts") { r ->
             if (backs.isEmpty()) {
                 ui = if (isSetupTest) PrintUi.SetupQuestions else PrintUi.Done(sentMessage(r))
             } else {
                 pendingBacks = Pending(backs, s, two.rotateBacks, isSetupTest, plan.sheets.size)
-                ui = PrintUi.WaitingFlip(two.pass2, two.keepAside, isSetupTest)
+                ui = PrintUi.WaitingFlip(two.pass2, two.blankBackSheet, isSetupTest)
             }
         }
     }
@@ -142,6 +173,7 @@ class PrintController(private val app: Application, private val store: ImageStor
         if (busy) return
         cancelFlag.set(false)
         ui = PrintUi.Running("Sending file", 1, 1, "Copying", 0f)
+        PrintService.start(app)
         scope.launch {
             val tmp = File(app.cacheDir, "raw_upload.prn")
             try {
@@ -167,6 +199,12 @@ class PrintController(private val app: Application, private val store: ImageStor
 
     fun close() = printer.close()
 
+    /** After a cancel or failure: drop any half-sent page from the printer's USB buffer. */
+    private suspend fun clearPrinter() = withContext(Dispatchers.IO) {
+        runCatching { printer.softReset() }
+        printer.refresh()
+    }
+
     private fun sentMessage(r: JobReport): String =
         "Sent ${r.pages} page(s) to the printer (%.1f MB). It should start printing within a few seconds. ".format(r.bytes / 1_048_576.0) +
             "If nothing happens, open Printer diagnostics → Last print job."
@@ -174,10 +212,11 @@ class PrintController(private val app: Application, private val store: ImageStor
     private fun run(sheets: List<Sheet>, s: PrintSettings, rotate: Boolean, label: String, onDone: (JobReport) -> Unit) {
         cancelFlag.set(false)
         ui = PrintUi.Running(label, 0, sheets.size, "Starting", 0f)
+        PrintService.start(app)
         scope.launch {
             try {
                 val report = runner.printSheets(sheets, s, rotate, { p ->
-                    ui = PrintUi.Running(label, p.page, p.total, p.stage, p.fraction)
+                    ui = PrintUi.Running(label, p.page, p.total, p.stage, p.fraction, p.notice)
                 }) { cancelFlag.get() }
                 lastReport = report
                 printer.refresh()
@@ -189,11 +228,18 @@ class PrintController(private val app: Application, private val store: ImageStor
                 ui = PrintUi.Failed(e.message ?: "The printer reports a problem.")
             } catch (e: PrintCancelled) {
                 pendingBacks = null
-                ui = PrintUi.Failed("Printing cancelled. The page being printed may come out unfinished.")
+                clearPrinter()
+                ui = PrintUi.Failed(
+                    "Printing cancelled. If a sheet is still half-way in the printer, press the printer's Stop button to push it out " +
+                        "before printing again.",
+                )
             } catch (e: Throwable) {
                 pendingBacks = null
-                printer.refresh()
-                ui = PrintUi.Failed(e.message ?: "Printing failed.")
+                clearPrinter()
+                ui = PrintUi.Failed(
+                    (e.message ?: "Printing failed.") +
+                        " If the printer's light is blinking or a sheet is stuck, remove it, press the Stop button and try again.",
+                )
             }
         }
     }

@@ -33,6 +33,16 @@ class MainActivity : ComponentActivity() {
             vm.onAppOpened()
         }
         setContent { AppTheme { App(vm) } }
+        askForNotifications()
+    }
+
+    /** Print progress, the two-sided flip step and printer problems show in the notification panel. */
+    private val notifyPermission =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+
+    private fun askForNotifications() {
+        val p = android.Manifest.permission.POST_NOTIFICATIONS
+        if (checkSelfPermission(p) != android.content.pm.PackageManager.PERMISSION_GRANTED) notifyPermission.launch(p)
     }
 
     override fun onResume() {

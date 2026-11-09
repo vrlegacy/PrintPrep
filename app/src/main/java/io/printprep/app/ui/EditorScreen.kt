@@ -436,8 +436,8 @@ fun TwoSidedCard(t: io.printprep.app.engine.TwoSidedPlan) {
             Text("Pass 1 (fronts): pages ${t.pass1.joinToString(", ")}")
             Text("Then flip the stack and reload it in the rear tray.")
             if (t.pass2.isEmpty()) Text("Pass 2: nothing (only one page).")
-            else Text("Pass 2 (backs): pages ${t.pass2.joinToString(", ")}${if (t.rotateBacks) " — rotated 180°" else ""}")
-            t.keepAside?.let { Text("Odd page count: keep sheet $it aside before pass 2 — it has no back.") }
+            else Text("Pass 2 (backs): pages ${t.pass2.joinToString(", ") { if (it == io.printprep.app.engine.TwoSidedPlan.BLANK_BACK) "blank" else "$it" }}${if (t.rotateBacks) " — rotated 180°" else ""}")
+            t.blankBackSheet?.let { Text("Odd page count: put the whole stack back — sheet $it just passes through blank.") }
         }
     }
 }

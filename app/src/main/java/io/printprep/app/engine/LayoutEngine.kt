@@ -25,14 +25,21 @@ data class Sheet(val number: Int, val paperW: Float, val paperH: Float, val plac
 
 /**
  * Manual two-sided printing: [pass1] and [pass2] are sheet numbers in the order they are sent.
- * [keepAside] is the physical sheet (1-based) that has no back when the page count is odd.
+ * With an odd page count the last front has no back: instead of asking the user to pull that sheet
+ * out, pass 2 feeds it through blank ([BLANK_BACK]) so the whole stack goes back in untouched.
+ * [blankBackSheet] is that physical sheet (1-based), for the explanation in the UI.
  */
 data class TwoSidedPlan(
     val pass1: List<Int>,
     val pass2: List<Int>,
-    val keepAside: Int?,
+    val blankBackSheet: Int?,
     val rotateBacks: Boolean,
-)
+) {
+    companion object {
+        /** Pass-2 entry meaning "feed this sheet through without printing". */
+        const val BLANK_BACK = 0
+    }
+}
 
 data class PrintPlan(
     val sheets: List<Sheet>,
@@ -84,11 +91,12 @@ object LayoutEngine {
 
     fun twoSided(sheetCount: Int, s: PrintSettings): TwoSidedPlan {
         val fronts = (1..sheetCount step 2).toList()
-        val backs = (2..sheetCount step 2).toList()
+        val odd = sheetCount % 2 == 1 && sheetCount > 1
+        val backs = (2..sheetCount step 2).toList() + if (odd) listOf(TwoSidedPlan.BLANK_BACK) else emptyList()
         return TwoSidedPlan(
             pass1 = fronts,
             pass2 = if (s.reverseBackOrder) backs.reversed() else backs,
-            keepAside = if (sheetCount % 2 == 1) (sheetCount + 1) / 2 else null,
+            blankBackSheet = if (odd) (sheetCount + 1) / 2 else null,
             rotateBacks = (s.duplex == Duplex.SHORT_EDGE) != s.rotateBack180,
         )
     }

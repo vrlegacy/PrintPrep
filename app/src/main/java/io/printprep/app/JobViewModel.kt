@@ -57,7 +57,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("printprep", android.content.Context.MODE_PRIVATE)
 
     /** USB printer and print jobs. */
-    val print = io.printprep.app.print.PrintController(app, store, viewModelScope)
+    val print = io.printprep.app.print.PrintController.get(app, store)
 
     val items = mutableStateListOf<JobItem>()
 
@@ -319,7 +319,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        print.close()
+        // The print controller outlives this screen on purpose: a running job carries on in the background.
         super.onCleared()
     }
 

@@ -150,6 +150,7 @@ fun DiagnosticsScreen(vm: JobViewModel) {
             when (val ui = ctl.ui) {
                 is PrintUi.Running -> {
                     Text("${ui.label}: ${ui.stage} ${(ui.fraction * 100).toInt()}%")
+                    ui.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     LinearProgressIndicator(progress = { ui.fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
                     OutlinedButton(onClick = { ctl.cancel() }) { Text("Cancel") }
                 }

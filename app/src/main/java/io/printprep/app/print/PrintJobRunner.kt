@@ -30,7 +30,14 @@ data class JobReport(
 )
 
 /** Progress of one pass: [page] is 1-based; [fraction] covers the whole pass. */
-data class PrintProgress(val page: Int, val total: Int, val stage: String, val fraction: Float)
+data class PrintProgress(
+    val page: Int,
+    val total: Int,
+    val stage: String,
+    val fraction: Float,
+    /** Something the user should know or do right now (printer out of paper, jammed…); null when all is well. */
+    val notice: String? = null,
+)
 
 /**
  * Prints sheets on the USB printer: each sheet is drawn in horizontal strips (the same drawing
@@ -90,9 +97,18 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
                     }
                     totalBytes += file.length()
                     val size = file.length().coerceAtLeast(1)
-                    printer.send(file, { sent ->
-                        onProgress(PrintProgress(i + 1, total, "Printing", base + step * (0.6f + 0.4f * sent / size)))
-                    }) { !isCancelled() }
+                    var lastFraction = base + step * 0.6f
+                    printer.send(
+                        file,
+                        onProgress = { sent ->
+                            lastFraction = base + step * (0.6f + 0.4f * sent / size)
+                            onProgress(PrintProgress(i + 1, total, "Printing", lastFraction))
+                        },
+                        shouldContinue = { !isCancelled() },
+                        onStall = { st, secs ->
+                            onProgress(PrintProgress(i + 1, total, "Printing", lastFraction, stallNotice(st, secs)))
+                        },
+                    )
                 } catch (e: UsbPrinter.CancelledException) {
                     throw PrintCancelled()
                 } finally {
@@ -113,6 +129,15 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
             throw PrinterReportedProblem(report, "The data was sent, but the printer reports: ${after.summary}.")
         }
         report
+    }
+
+    /** What to tell the user while the printer isn't taking data. Short pauses are normal (it's printing). */
+    private fun stallNotice(st: PortStatus?, secs: Int): String? = when {
+        st == null && secs == 0 -> null
+        st?.paperEmpty == true -> "The printer is out of paper. Load paper in the rear tray, then press the printer's Resume/Stop button — printing carries on."
+        st?.error == true -> "The printer reports a problem (paper jam, cover open or ink). Fix it, then press the printer's Resume/Stop button — printing carries on."
+        secs >= 45 -> "The printer hasn't taken data for $secs s. If paper is stuck, pull it out gently and press the Resume/Stop button. Or tap Cancel."
+        else -> null
     }
 
     private fun readHeader(f: File): String {
