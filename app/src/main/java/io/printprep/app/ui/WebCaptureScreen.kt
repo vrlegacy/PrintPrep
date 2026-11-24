@@ -85,6 +85,9 @@ import io.printprep.app.JobViewModel
 object WebShortcuts {
     /** The browser's Home button goes here. */
     const val KARNATAKA_LAND_RECORDS = "https://landrecords.karnataka.gov.in/Service2/"
+
+    /** Image search opens Google Images; its search box is auto-focused on load. */
+    const val GOOGLE_IMAGES = "https://www.google.com/imghp?hl=en&authuser=0&ogbl"
 }
 
 /** Turns what was typed into an address: a URL stays a URL, anything else becomes a web search. */
@@ -94,20 +97,6 @@ fun toUrl(input: String): String {
         t.startsWith("http://") || t.startsWith("https://") -> t
         !t.contains(' ') && t.contains('.') -> "https://$t"
         else -> "https://www.google.com/search?q=" + Uri.encode(t)
-    }
-}
-
-/**
- * Like [toUrl], but anything that isn't a web address becomes a Google Images search instead of a
- * plain web search. Used by Home's "Image search" entry, where people type what they're looking for
- * (or paste a URL).
- */
-fun toImageSearchUrl(input: String): String {
-    val t = input.trim()
-    return when {
-        t.startsWith("http://") || t.startsWith("https://") -> t
-        !t.contains(' ') && t.contains('.') -> "https://$t"
-        else -> "https://www.google.com/search?tbm=isch&q=" + Uri.encode(t)
     }
 }
 
@@ -245,6 +234,15 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                                     loading = false
                                     if (url != null) currentUrl = url
                                     pageTitle = view?.title.orEmpty()
+                                    // On the Google Images home page, put the cursor in the search box.
+                                    if (url != null && url.contains("google.") && url.contains("imghp")) {
+                                        view?.requestFocus()
+                                        view?.evaluateJavascript(
+                                            "(function(){var e=document.querySelector('textarea[name=q],input[name=q]');" +
+                                                "if(e){e.focus();e.click();}})();",
+                                            null,
+                                        )
+                                    }
                                 }
 
                                 override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {

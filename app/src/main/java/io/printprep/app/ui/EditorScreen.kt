@@ -147,7 +147,7 @@ fun EditorScreen(vm: JobViewModel) {
             if (vm.importing) LinearProgressIndicator(Modifier.fillMaxWidth())
             SheetPager(vm, plan, Modifier.weight(0.42f).fillMaxWidth())
             if (plan.sheets.isNotEmpty()) PreviewControls(vm, s)
-            ItemStrip(vm, items)
+            ItemStrip(vm, items) { addFiles.launch(arrayOf("image/*", "image/webp", "application/pdf")) }
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
                 TABS.forEachIndexed { i, t -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t) }) }
             }
@@ -220,7 +220,7 @@ private fun SheetPager(vm: JobViewModel, plan: PrintPlan, modifier: Modifier) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PreviewControls(vm: JobViewModel, s: PrintSettings) {
+fun PreviewControls(vm: JobViewModel, s: PrintSettings) {
     Surface(tonalElevation = 1.dp) {
         FlowRow(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
@@ -311,14 +311,35 @@ private fun SheetPreview(vm: JobViewModel, sheet: Sheet, s: PrintSettings, onTap
 }
 
 @Composable
-private fun ItemStrip(vm: JobViewModel, jobItems: List<JobItem>) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(jobItems, key = { it.id }) { item ->
-            Thumb(vm, item, jobItems.indexOf(item) + 1)
+private fun ItemStrip(vm: JobViewModel, jobItems: List<JobItem>, onAdd: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Fixed "add" tile: stays pinned at the start while the thumbnails scroll.
+        AddTile(onAdd)
+        LazyRow(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 4.dp, end = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(jobItems, key = { it.id }) { item ->
+                Thumb(vm, item, jobItems.indexOf(item) + 1)
+            }
         }
+    }
+}
+
+/** Fixed +, pinned at the start of the media strip, to add more photos or PDFs. */
+@Composable
+private fun AddTile(onAdd: () -> Unit) {
+    Box(
+        Modifier
+            .padding(start = 12.dp)
+            .size(56.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clickable { onAdd() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Add, "Add photos or PDFs", tint = MaterialTheme.colorScheme.onPrimaryContainer)
     }
 }
 

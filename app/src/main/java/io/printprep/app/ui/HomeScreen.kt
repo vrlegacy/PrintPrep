@@ -50,7 +50,6 @@ fun HomeScreen(vm: JobViewModel) {
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         vm.import(uris)
     }
-    var askImage by remember { mutableStateOf(false) }
     var askWeb by remember { mutableStateOf(false) }
 
     Scaffold(bottomBar = { AppBottomNav(vm) }) { pad ->
@@ -76,6 +75,9 @@ fun HomeScreen(vm: JobViewModel) {
                 Button(onClick = { vm.goToEditor() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Text("Continue current job (${vm.items.size} items)")
                 }
+                OutlinedButton(onClick = { vm.newJob() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Start a new job")
+                }
             }
             HomeAction("Pick photos", R.drawable.ic_photo, Color(0xFF2E7D6B)) {
                 photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -86,24 +88,15 @@ fun HomeScreen(vm: JobViewModel) {
             HomeAction("ಪಹಣಿ RTC", R.drawable.ic_pahani, Color(0xFFF3EDE4), content = Color(0xFF3A2E1E), tint = false) {
                 vm.openWeb(WebShortcuts.KARNATAKA_LAND_RECORDS)
             }
-            HomeAction("Image search", R.drawable.ic_search, Color(0xFF7B4FA3)) { askImage = true }
-            HomeAction("Web search", R.drawable.ic_public, Color(0xFF1565C0)) { askWeb = true }
-            if (vm.items.isNotEmpty()) {
-                OutlinedButton(onClick = { vm.newJob() }, modifier = Modifier.fillMaxWidth()) { Text("Start a new job") }
+            HomeAction("Image search", R.drawable.ic_search, Color(0xFF7B4FA3)) {
+                vm.openWeb(WebShortcuts.GOOGLE_IMAGES)
             }
+            HomeAction("Web search", R.drawable.ic_public, Color(0xFF1565C0)) { askWeb = true }
 
             PrinterStatusCard(vm)
         }
     }
 
-    if (askImage) SearchDialog(
-        title = "Image search",
-        label = "Search Google Images or paste a URL",
-        onDismiss = { askImage = false },
-    ) { query ->
-        askImage = false
-        vm.openWeb(toImageSearchUrl(query))
-    }
     if (askWeb) SearchDialog(
         title = "Web search",
         label = "Search Google or paste a URL",

@@ -95,6 +95,9 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         screen = target
     }
 
+    /** True when Back from the current screen would return to the in-app browser (web / image / pahani). */
+    val previousIsWeb: Boolean get() = backStack.lastOrNull() is Screen.Web
+
     /** The four bottom-navigation destinations, in order. */
     val tabs = listOf(Screen.Home, Screen.Editor, Screen.Printer, Screen.Settings)
 

@@ -120,6 +120,9 @@ private fun Confirm(vm: JobViewModel, plan: PrintPlan) {
     val ready = vm.print.printer.state is PrinterState.Ready
     Text("Print", style = MaterialTheme.typography.titleLarge)
     PrinterStatusCard(vm)
+    // Same compact controls as under the editor preview, so copies / colour / sides / quality can
+    // be changed here too; the summary below updates as they change.
+    PreviewControls(vm, s)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             SummaryRow("Pages", "${plan.sheets.size}" + if (plan.twoSided != null) " on ${plan.paperCount} sheet(s), two-sided" else "")
