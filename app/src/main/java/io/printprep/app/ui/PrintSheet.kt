@@ -84,7 +84,13 @@ fun PrintSheet(vm: JobViewModel, plan: PrintPlan, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) { if (ui is PrintUi.Done || ui is PrintUi.Failed) ctl.reset() }
 
     ModalBottomSheet(
-        onDismissRequest = { if (!ctl.busy && ui !is PrintUi.WaitingFlip) { ctl.reset(); onDismiss() } },
+        onDismissRequest = {
+            if (!ctl.busy && ui !is PrintUi.WaitingFlip) {
+                ctl.reset()
+                if (ui is PrintUi.Done && ui.jobPrinted) vm.newJob()
+                onDismiss()
+            }
+        },
         sheetState = sheetState,
     ) {
         Column(
@@ -96,7 +102,12 @@ fun PrintSheet(vm: JobViewModel, plan: PrintPlan, onDismiss: () -> Unit) {
                 is PrintUi.Running -> Running(ui) { ctl.cancel() }
                 is PrintUi.WaitingFlip -> Flip(ui, onContinue = { ctl.continueAfterFlip() }, onCancel = { ctl.cancel() })
                 PrintUi.SetupQuestions -> SetupQuestions { right, upside -> vm.answerDuplexSetup(right, upside) }
-                is PrintUi.Done -> Finished(ui.message, ok = true) { ctl.reset(); onDismiss() }
+                is PrintUi.Done -> Finished(ui.message, ok = true) {
+                    ctl.reset()
+                    // A successful print of the user's own job clears it and starts fresh.
+                    if (ui.jobPrinted) vm.newJob()
+                    onDismiss()
+                }
                 is PrintUi.Failed -> Finished(ui.message, ok = false, onRetry = { ctl.reset() }) { ctl.reset(); onDismiss() }
             }
         }

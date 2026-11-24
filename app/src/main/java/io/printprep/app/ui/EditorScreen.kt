@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -120,28 +121,32 @@ fun EditorScreen(vm: JobViewModel) {
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Row(
-                    Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = { showOutput = true },
-                        enabled = plan.sheets.isNotEmpty() && !vm.importing,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                    ) { Text("Save…") }
-                    Button(
-                        onClick = { showPrint = true },
-                        enabled = plan.sheets.isNotEmpty() && !vm.importing,
-                        modifier = Modifier.weight(2f).height(52.dp),
-                    ) { Text("Print · ${plan.paperCount} sheet(s)") }
+            Column {
+                Surface(tonalElevation = 3.dp) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = { showOutput = true },
+                            enabled = plan.sheets.isNotEmpty() && !vm.importing,
+                            modifier = Modifier.weight(1f).height(52.dp),
+                        ) { Text("Save…") }
+                        Button(
+                            onClick = { showPrint = true },
+                            enabled = plan.sheets.isNotEmpty() && !vm.importing,
+                            modifier = Modifier.weight(2f).height(52.dp),
+                        ) { Text("Print · ${plan.paperCount} sheet(s)") }
+                    }
                 }
+                AppBottomNav(vm)
             }
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             if (vm.importing) LinearProgressIndicator(Modifier.fillMaxWidth())
             SheetPager(vm, plan, Modifier.weight(0.42f).fillMaxWidth())
+            if (plan.sheets.isNotEmpty()) PreviewControls(vm, s)
             ItemStrip(vm, items)
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
                 TABS.forEachIndexed { i, t -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t) }) }
@@ -206,6 +211,69 @@ private fun SheetPager(vm: JobViewModel, plan: PrintPlan, modifier: Modifier) {
             style = MaterialTheme.typography.labelMedium,
         )
     }
+}
+
+/**
+ * Compact quick controls shown right under the preview: a copies stepper (− / +) plus small
+ * tap-to-change buttons for colour, sides and print quality. Kept deliberately small (not the full
+ * chip groups from the Quick tab) — they bind to the same settings, so everything stays in sync.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PreviewControls(vm: JobViewModel, s: PrintSettings) {
+    Surface(tonalElevation = 1.dp) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // copies: − N +
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RoundBtn("−", enabled = s.copies > 1) { vm.update { it.copy(copies = (it.copies - 1).coerceAtLeast(1)) } }
+                Text(
+                    "${s.copies} ${if (s.copies == 1) "copy" else "copies"}",
+                    Modifier.padding(horizontal = 6.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                RoundBtn("+", enabled = s.copies < 99) { vm.update { it.copy(copies = (it.copies + 1).coerceAtMost(99)) } }
+            }
+            // colour: tap toggles Colour ↔ Black and white
+            PillBtn(if (s.color == ColorMode.COLOR) "Colour" else "B&W") {
+                vm.setColor(if (s.color == ColorMode.COLOR) ColorMode.GRAYSCALE else ColorMode.COLOR)
+            }
+            // sides: tap toggles one ↔ both
+            PillBtn(if (s.duplex == Duplex.OFF) "1 side" else "2 sides") {
+                vm.update { it.copy(duplex = if (it.duplex == Duplex.OFF) Duplex.LONG_EDGE else Duplex.OFF) }
+            }
+            // quality: tap cycles through the options
+            PillBtn(s.quality.label) {
+                val e = Quality.entries
+                val next = e[(e.indexOf(s.quality) + 1) % e.size]
+                vm.update { it.copy(quality = next) }
+            }
+        }
+    }
+}
+
+/** Small square +/- button for the copies stepper. */
+@Composable
+private fun RoundBtn(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier.size(36.dp),
+    ) { Text(text, style = MaterialTheme.typography.titleMedium) }
+}
+
+/** Small tap-to-change button showing the current value of a setting. */
+@Composable
+private fun PillBtn(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+        modifier = Modifier.height(36.dp),
+    ) { Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1) }
 }
 
 @Composable
@@ -295,6 +363,14 @@ private fun QuickPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
         vm.update { it.copy(layout = preset, fit = if (preset is FixedSizePreset) FitMode.FILL else it.fit) }
     }
     ChoiceChips("Orientation", PageOrientation.entries, s.orientation, { it.label }) { o -> vm.update { it.copy(orientation = o) } }
+    ChoiceChips("Sides", listOf(false, true), s.duplex != Duplex.OFF, { if (it) "Both sides" else "One side" }) { both ->
+        vm.update {
+            it.copy(duplex = if (!both) Duplex.OFF else if (it.duplex == Duplex.OFF) Duplex.LONG_EDGE else it.duplex)
+        }
+    }
+    if (s.duplex != Duplex.OFF) {
+        Hint("The G2010 can't print both sides by itself: PrintPrep prints the fronts, then shows you how to flip the stack for the backs. Flip direction (long or short edge) is in the Pages tab.")
+    }
     ChoiceChips("Fit", FitMode.entries, s.fit, { it.label }) { f -> vm.update { it.copy(fit = f) } }
     ChoiceChips("Margins", MarginPreset.entries, s.margin, { it.label }) { m -> vm.update { it.copy(margin = m) } }
     if (s.margin == MarginPreset.CUSTOM) {
@@ -305,14 +381,6 @@ private fun QuickPanel(vm: JobViewModel, s: PrintSettings, plan: PrintPlan) {
     ChoiceChips("Print quality", Quality.entries, s.quality, { it.label }) { q -> vm.update { it.copy(quality = q) } }
     Hint("Follows colour: Standard for colour, Ink saver for black and white. You can change it.")
     Stepper("Copies", s.copies, 1, 99) { v -> vm.update { it.copy(copies = v) } }
-    ChoiceChips("Sides", listOf(false, true), s.duplex != Duplex.OFF, { if (it) "Both sides" else "One side" }) { both ->
-        vm.update {
-            it.copy(duplex = if (!both) Duplex.OFF else if (it.duplex == Duplex.OFF) Duplex.LONG_EDGE else it.duplex)
-        }
-    }
-    if (s.duplex != Duplex.OFF) {
-        Hint("The G2010 can't print both sides by itself: PrintPrep prints the fronts, then shows you how to flip the stack for the backs. Flip direction (long or short edge) is in the Pages tab.")
-    }
 
     val canSave = plan.sheets.isNotEmpty() && !vm.exporting && !vm.importing
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -19,6 +19,7 @@ import io.printprep.app.engine.LayoutEngine
 import io.printprep.app.engine.PrintPlan
 import io.printprep.app.engine.Sheet
 import io.printprep.app.engine.SheetRenderer
+import io.printprep.app.model.ColorMode
 import io.printprep.app.model.FitMode
 import io.printprep.app.model.ItemEdit
 import io.printprep.app.model.ItemKind
@@ -37,6 +38,7 @@ sealed interface Screen {
     data object Editor : Screen
     data class EditItem(val itemId: Long) : Screen
     data class Web(val url: String) : Screen
+    data object Printer : Screen
     data object Diagnostics : Screen
     data object Settings : Screen
 }
@@ -62,15 +64,53 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     val items = mutableStateListOf<JobItem>()
 
     var settings by mutableStateOf(
+        // New jobs default to Black and white (ink saver follows, as elsewhere); switchable per job.
         PrintSettings(
             reverseBackOrder = prefs.getBoolean("reverseBackOrder", false),
             rotateBack180 = prefs.getBoolean("rotateBack180", false),
             lastPageFirst = prefs.getBoolean("lastPageFirst", true),
-        )
+        ).withColor(ColorMode.GRAYSCALE)
     )
         private set
     var screen by mutableStateOf<Screen>(Screen.Home)
         private set
+
+    /**
+     * Screens below the current one, oldest first. [navigateTo] pushes the current screen here on
+     * the way to a new one, and [back] pops it, so Back returns to wherever the user actually came
+     * from (e.g. browser → print editor → Back → browser), not a fixed Home screen.
+     */
+    private val backStack = mutableListOf<Screen>()
+
+    /** Go to [target], remembering the current screen so Back comes back to it. */
+    private fun navigateTo(target: Screen) {
+        if (target == screen) return
+        backStack.add(screen)
+        screen = target
+    }
+
+    /** Go to [target] as a fresh root, clearing the Back history (used by Home resets). */
+    private fun resetTo(target: Screen) {
+        backStack.clear()
+        screen = target
+    }
+
+    /** The four bottom-navigation destinations, in order. */
+    val tabs = listOf(Screen.Home, Screen.Editor, Screen.Printer, Screen.Settings)
+
+    /** True on the top-level destinations, where the bottom navigation bar is shown. */
+    val onTopLevel: Boolean get() = screen in tabs
+
+    /**
+     * Switches bottom-navigation tab. Home is the start destination, so Back from any other tab
+     * returns to Home (and from Home it leaves the app), like a standard bottom-nav app.
+     */
+    fun selectTab(target: Screen) {
+        if (target == screen) return
+        backStack.clear()
+        if (target != Screen.Home) backStack.add(Screen.Home)
+        screen = target
+    }
     var importing by mutableStateOf(false)
         private set
     var message by mutableStateOf<String?>(null)
@@ -91,7 +131,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     /** [openEditor] false keeps the current screen (used by the in-app browser). */
     fun import(uris: List<Uri>, openEditor: Boolean = true, onAdded: (Int) -> Unit = {}) {
         if (uris.isEmpty()) return
-        if (openEditor) screen = Screen.Editor
+        if (openEditor) navigateTo(Screen.Editor)
         importing = true
         viewModelScope.launch {
             val wasEmpty = items.isEmpty()
@@ -100,7 +140,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
             if (wasEmpty) applyDefaultsFor(result.items)
             importing = false
             if (result.failed.isNotEmpty()) message = "Couldn't open: ${result.failed.joinToString()}"
-            if (openEditor && items.isEmpty()) screen = Screen.Home
+            if (openEditor && items.isEmpty()) resetTo(Screen.Home)
             onAdded(result.items.size)
         }
     }
@@ -174,7 +214,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openWeb(url: String) {
-        screen = Screen.Web(url)
+        navigateTo(Screen.Web(url))
     }
 
     /** Called on the main thread from the web screen once the page has loaded. */
@@ -203,21 +243,29 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     // ---------------- navigation ----------------
 
     fun openItem(id: Long) {
-        screen = Screen.EditItem(id)
+        navigateTo(Screen.EditItem(id))
     }
 
     fun goToEditor() {
-        screen = if (items.isEmpty()) Screen.Home else Screen.Editor
+        navigateTo(if (items.isEmpty()) Screen.Home else Screen.Editor)
     }
 
+    /**
+     * Returns to the previous screen. Entries that no longer make sense are skipped — the print
+     * editor with an empty job, or an item page whose item has since been removed — falling back to
+     * Home when the history runs out.
+     */
     fun back() {
-        screen = when (screen) {
-            is Screen.EditItem -> Screen.Editor
-            is Screen.Web -> if (items.isEmpty()) Screen.Home else Screen.Editor
-            Screen.Diagnostics -> if (items.isEmpty()) Screen.Home else Screen.Editor
-            Screen.Settings -> Screen.Home
-            else -> Screen.Home
+        while (backStack.isNotEmpty()) {
+            val previous = backStack.removeAt(backStack.lastIndex)
+            val stale = (previous is Screen.Editor && items.isEmpty()) ||
+                (previous is Screen.EditItem && items.none { it.id == previous.itemId })
+            if (!stale) {
+                screen = previous
+                return
+            }
         }
+        screen = Screen.Home
     }
 
     // ---------------- editing ----------------
@@ -238,7 +286,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------- printing ----------------
 
-    fun printNow() = print.print(plan(), settings)
+    fun printNow() = print.print(plan(), settings, isUserJob = true)
 
     fun startDuplexSetupTest() = print.startSetupTest(settings)
 
@@ -248,11 +296,11 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openDiagnostics() {
-        screen = Screen.Diagnostics
+        navigateTo(Screen.Diagnostics)
     }
 
     fun openSettings() {
-        screen = Screen.Settings
+        navigateTo(Screen.Settings)
     }
 
     // ---------------- app updates ----------------
@@ -344,7 +392,7 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     fun remove(id: Long) {
         items.removeAll { it.id == id }
-        if (screen is Screen.EditItem) screen = if (items.isEmpty()) Screen.Home else Screen.Editor
+        if (screen is Screen.EditItem) back()
     }
 
     fun newJob() {
@@ -353,10 +401,10 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
             reverseBackOrder = settings.reverseBackOrder,
             rotateBack180 = settings.rotateBack180,
             lastPageFirst = settings.lastPageFirst,
-        )
+        ).withColor(ColorMode.GRAYSCALE)
         lastExport = null
         store.clear()
-        screen = Screen.Home
+        resetTo(Screen.Home)
     }
 
     // ---------------- preview & export ----------------

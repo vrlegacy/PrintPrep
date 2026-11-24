@@ -76,6 +76,53 @@ object TestPages {
     }
 
     /**
+     * Nozzle-check pattern: a block of fine horizontal lines in each ink (black, cyan, magenta,
+     * yellow) plus a light grey block. On a healthy head every block is solid and evenly striped;
+     * missing nozzles show as white gaps or faint bands, which is the sign a head cleaning is due.
+     */
+    fun nozzleCheck(): Bitmap {
+        val b = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
+        val c = Canvas(b)
+        c.drawColor(Color.WHITE)
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; typeface = Typeface.DEFAULT_BOLD; textSize = 56f }
+        c.drawText("PrintPrep nozzle check", 60f, 120f, text)
+        text.typeface = Typeface.DEFAULT; text.textSize = 28f
+        c.drawText("Every block should be solid and evenly striped. White gaps or faint", 60f, 170f, text)
+        c.drawText("bands mean clogged nozzles — run a head cleaning, then check again.", 60f, 206f, text)
+
+        // One labelled block per ink: fine 1px lines, 2px apart, so a dropped nozzle leaves a gap.
+        val channels = listOf(
+            "Black (K)" to Color.BLACK,
+            "Cyan (C)" to Color.rgb(0, 174, 239),
+            "Magenta (M)" to Color.rgb(236, 0, 140),
+            "Yellow (Y)" to Color.rgb(255, 222, 0),
+            "Light grey" to Color.rgb(170, 170, 170),
+        )
+        val left = 60f
+        val right = W - 60f
+        val blockH = 120f
+        val gap = 48f
+        var y = 260f
+        val line = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 1f }
+        channels.forEach { (name, col) ->
+            text.typeface = Typeface.DEFAULT_BOLD; text.textSize = 30f; text.color = Color.BLACK
+            c.drawText(name, left, y - 12f, text)
+            line.color = col
+            var ly = y
+            while (ly < y + blockH) {
+                c.drawLine(left, ly, right, ly, line)
+                ly += 2f
+            }
+            // a solid swatch beside the lines, as a second reference for density
+            val swatch = Paint().apply { color = col; style = Paint.Style.FILL }
+            c.drawRect(right - 160f, y, right, y + blockH, swatch)
+            c.drawRect(right - 160f, y, right, y + blockH, Paint().apply { style = Paint.Style.STROKE; color = Color.LTGRAY })
+            y += blockH + gap
+        }
+        return b
+    }
+
+    /**
      * Colour-match sheet (A4 at 150 DPI): the same picture six times, each with one [PrintTone]
      * already applied, labelled A–F. Printed with no extra tone, so the user can pick the panel that
      * looks most like the original. Uses [photo] if given, plus grey steps and colour patches.

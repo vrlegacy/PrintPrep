@@ -8,13 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,12 +37,8 @@ import io.printprep.app.UpdateState
 @Composable
 fun SettingsScreen(vm: JobViewModel) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = { IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-            )
-        },
+        topBar = { TopAppBar(title = { Text("Settings") }) },
+        bottomBar = { AppBottomNav(vm) },
     ) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -69,12 +61,9 @@ fun SettingsScreen(vm: JobViewModel) {
                     Hint("Update opens the new version in your browser; tap the finished download to install it.")
                 }
             }
-            Text("Printer", style = MaterialTheme.typography.titleMedium)
-            PrinterStatusCard(vm)
-            OutlinedButton(onClick = { vm.openDiagnostics() }, modifier = Modifier.fillMaxWidth()) { Text("Printer diagnostics & test page") }
-
             Text("Print colour", style = MaterialTheme.typography.titleMedium)
             PrintColourCard(vm)
+            Hint("Printer status, nozzle check, cleaning and diagnostics are on the Printer tab.")
         }
     }
 }

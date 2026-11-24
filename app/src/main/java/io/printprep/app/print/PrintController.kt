@@ -44,7 +44,8 @@ sealed interface PrintUi {
     data class WaitingFlip(val backs: List<Int>, val blankBackSheet: Int?, val isSetupTest: Boolean) : PrintUi
     /** The setup test has printed: ask the two questions. */
     data object SetupQuestions : PrintUi
-    data class Done(val message: String) : PrintUi
+    /** [jobPrinted] is true only for the user's own job (not a test/colour-match/setup print). */
+    data class Done(val message: String, val jobPrinted: Boolean = false) : PrintUi
     data class Failed(val message: String) : PrintUi
 }
 
@@ -80,7 +81,7 @@ class PrintController private constructor(private val app: Application, private 
 
     private var pendingBacks: Pending? = null
 
-    private data class Pending(val sheets: List<Sheet>, val settings: PrintSettings, val rotate: Boolean, val isSetupTest: Boolean, val total: Int)
+    private data class Pending(val sheets: List<Sheet>, val settings: PrintSettings, val rotate: Boolean, val isSetupTest: Boolean, val isUserJob: Boolean, val total: Int)
 
     val busy: Boolean get() = ui is PrintUi.Running
 
@@ -97,13 +98,13 @@ class PrintController private constructor(private val app: Application, private 
     }
 
     /** Prints a plan with the given settings: one pass, or fronts then (after a flip) backs. */
-    fun print(plan: PrintPlan, s: PrintSettings, isSetupTest: Boolean = false) {
+    fun print(plan: PrintPlan, s: PrintSettings, isSetupTest: Boolean = false, isUserJob: Boolean = false) {
         if (busy || plan.sheets.isEmpty()) return
         val two = plan.twoSided
         if (two == null) {
             val order = if (s.lastPageFirst) plan.sheets.reversed() else plan.sheets
             run(order, s, rotate = false, label = "Printing") { r ->
-                ui = PrintUi.Done(sentMessage(r))
+                ui = PrintUi.Done(sentMessage(r), jobPrinted = isUserJob)
             }
             return
         }
@@ -115,9 +116,9 @@ class PrintController private constructor(private val app: Application, private 
         }
         run(fronts, s, rotate = false, label = "Pass 1 of 2 · fronts") { r ->
             if (backs.isEmpty()) {
-                ui = if (isSetupTest) PrintUi.SetupQuestions else PrintUi.Done(sentMessage(r))
+                ui = if (isSetupTest) PrintUi.SetupQuestions else PrintUi.Done(sentMessage(r), jobPrinted = isUserJob)
             } else {
-                pendingBacks = Pending(backs, s, two.rotateBacks, isSetupTest, plan.sheets.size)
+                pendingBacks = Pending(backs, s, two.rotateBacks, isSetupTest, isUserJob, plan.sheets.size)
                 ui = PrintUi.WaitingFlip(two.pass2, two.blankBackSheet, isSetupTest)
             }
         }
@@ -128,7 +129,8 @@ class PrintController private constructor(private val app: Application, private 
         val p = pendingBacks ?: return
         pendingBacks = null
         run(p.sheets, p.settings, rotate = p.rotate, label = "Pass 2 of 2 · backs") { r ->
-            ui = if (p.isSetupTest) PrintUi.SetupQuestions else PrintUi.Done(sentMessage(r) + " Both sides are done.")
+            ui = if (p.isSetupTest) PrintUi.SetupQuestions
+                 else PrintUi.Done(sentMessage(r) + " Both sides are done.", jobPrinted = p.isUserJob)
         }
     }
 
@@ -166,6 +168,35 @@ class PrintController private constructor(private val app: Application, private 
             }
             val s = PrintSettings(margin = MarginPreset.DEFAULT, quality = Quality.STANDARD, lastPageFirst = false)
             print(LayoutEngine.plan(listOf(item), s), s)
+        }
+    }
+
+    /**
+     * Prints a nozzle-check pattern (fine lines in each ink, see [TestPages.nozzleCheck]) at standard
+     * quality on plain paper, so missing or clogged nozzles show up as gaps or faded blocks.
+     */
+    fun printNozzleCheck() {
+        if (busy) return
+        scope.launch {
+            val item = withContext(Dispatchers.Default) {
+                val bmp = TestPages.nozzleCheck()
+                store.saveBitmapItem(bmp, "Nozzle check", ItemKind.WEB_PAGE).also { bmp.recycle() }
+            }
+            val s = PrintSettings(margin = MarginPreset.DEFAULT, quality = Quality.STANDARD, lastPageFirst = false)
+            print(LayoutEngine.plan(listOf(item), s), s)
+        }
+    }
+
+    /**
+     * Sends a stop + soft reset to the printer to clear a job it is stuck on, without printing
+     * anything. Best effort; reports the outcome through [ui].
+     */
+    fun clearStuckJob() {
+        if (busy) return
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { printer.cancelOnPrinter() }
+            ui = if (ok) PrintUi.Done("Sent a stop and reset to the printer. If it was stuck, it should go idle now.")
+                 else PrintUi.Failed("Couldn't reach the printer. Check the cable and that USB access is allowed.")
         }
     }
 

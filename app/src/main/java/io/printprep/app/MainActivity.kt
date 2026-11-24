@@ -100,6 +100,7 @@ private fun App(vm: JobViewModel) {
         Screen.Editor -> EditorScreen(vm)
         is Screen.EditItem -> ItemEditScreen(vm, screen.itemId)
         is Screen.Web -> WebCaptureScreen(vm, screen.url)
+        Screen.Printer -> io.printprep.app.ui.PrinterOpsScreen(vm)
         Screen.Diagnostics -> io.printprep.app.ui.DiagnosticsScreen(vm)
         Screen.Settings -> io.printprep.app.ui.SettingsScreen(vm)
     }

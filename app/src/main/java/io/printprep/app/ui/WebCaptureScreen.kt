@@ -98,6 +98,20 @@ fun toUrl(input: String): String {
 }
 
 /**
+ * Like [toUrl], but anything that isn't a web address becomes a Google Images search instead of a
+ * plain web search. Used by Home's "Image search" entry, where people type what they're looking for
+ * (or paste a URL).
+ */
+fun toImageSearchUrl(input: String): String {
+    val t = input.trim()
+    return when {
+        t.startsWith("http://") || t.startsWith("https://") -> t
+        !t.contains(' ') && t.contains('.') -> "https://$t"
+        else -> "https://www.google.com/search?tbm=isch&q=" + Uri.encode(t)
+    }
+}
+
+/**
  * In-app browser. Bottom: a compact navigation bar (back, forward, home, address/search, refresh,
  * desktop site) above the capture/print bar. A thin loading line shows while pages or downloads load.
  */
