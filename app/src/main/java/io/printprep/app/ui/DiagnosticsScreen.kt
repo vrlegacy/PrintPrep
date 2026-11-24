@@ -76,7 +76,8 @@ fun DiagnosticsScreen(vm: JobViewModel) {
             }
             details = text.trimEnd()
             driver = withContext(Dispatchers.IO) {
-                Gutenprint.ensureReady(context) ?: "Gutenprint ${Gutenprint.version()} · driver ${Gutenprint.G2010_DRIVER} ready"
+                val d = io.printprep.app.model.CanonDriver.saved(context)
+                Gutenprint.ensureReady(context, d.id) ?: "Gutenprint ${Gutenprint.version()} · driver ${d.id} (${d.label}) ready"
             }
         }
     }

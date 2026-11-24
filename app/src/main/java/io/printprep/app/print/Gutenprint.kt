@@ -14,7 +14,7 @@ fun interface RowSource {
  */
 object Gutenprint {
 
-    /** Gutenprint has no G2010 entry; the G2000 series driver is the one known to work with it. */
+    /** Gutenprint has no G2010 entry; the G2000 series driver is the long-standing default for it. */
     const val G2010_DRIVER = "bjc-G2000-series"
 
     private var loaded: Boolean? = null
@@ -29,23 +29,27 @@ object Gutenprint {
             return ok
         }
 
-    /** Loads the driver and its printer data. Returns an error message, or null when ready. */
+    /**
+     * Loads the printer data (once) and checks that [driver] is present. Returns an error message,
+     * or null when ready. The driver is checked on every call so a newly-selected one is verified.
+     */
     @Synchronized
-    fun ensureReady(context: Context): String? {
-        if (initialised) return null
+    fun ensureReady(context: Context, driver: String = G2010_DRIVER): String? {
         if (!available) return "This build doesn't include the printer driver. Install the APK from the GitHub build."
-        val dir = File(context.filesDir, "gutenprint")
-        val marker = File(dir, ".copied-${appVersion(context)}")
-        if (!marker.exists()) {
-            dir.deleteRecursively()
-            val copied = copyAssets(context, "gutenprint", dir)
-            if (copied == 0) return "Printer data is missing from this build."
-            marker.createNewFile()
+        if (!initialised) {
+            val dir = File(context.filesDir, "gutenprint")
+            val marker = File(dir, ".copied-${appVersion(context)}")
+            if (!marker.exists()) {
+                dir.deleteRecursively()
+                val copied = copyAssets(context, "gutenprint", dir)
+                if (copied == 0) return "Printer data is missing from this build."
+                marker.createNewFile()
+            }
+            val xml = File(dir, "xml")
+            if (!nativeInit(xml.absolutePath)) return "The printer driver failed to start."
+            initialised = true
         }
-        val xml = File(dir, "xml")
-        if (!nativeInit(xml.absolutePath)) return "The printer driver failed to start."
-        if (!nativeHasDriver(G2010_DRIVER)) return "The Canon G2000/G2010 driver wasn't found in the printer data."
-        initialised = true
+        if (!nativeHasDriver(driver)) return "The selected printer driver ($driver) isn't available in this build."
         return null
     }
 

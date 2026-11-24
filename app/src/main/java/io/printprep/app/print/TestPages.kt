@@ -162,6 +162,30 @@ object TestPages {
         return b
     }
 
+    /**
+     * One calibration page (A4 at 150 DPI): a bold [title] and [subtitle] naming the driver or
+     * colour-correction mode under test, above the same reference chart (the job's photo if given,
+     * plus grey steps and colour patches). One of these is printed per candidate so the user can
+     * lay them side by side and pick the one whose colour matches their phone.
+     */
+    fun calibrationPage(photo: Bitmap?, title: String, subtitle: String): Bitmap {
+        val w = 1240; val h = 1754
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(b)
+        c.drawColor(Color.WHITE)
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; typeface = Typeface.DEFAULT_BOLD; textSize = 54f }
+        c.drawText(title, 70f, 100f, text)
+        text.typeface = Typeface.DEFAULT; text.textSize = 28f
+        c.drawText(subtitle, 70f, 150f, text)
+        text.textSize = 24f
+        c.drawText("Compare with the same picture on your phone, then pick the best option in Settings.", 70f, 190f, text)
+        val top = 220f; val side = 70f; val bottom = 60f
+        val panel = panel(photo, (w - side * 2).toInt(), (h - top - bottom).toInt())
+        c.drawBitmap(panel, side, top, null)
+        panel.recycle()
+        return b
+    }
+
     /** One panel: the photo (centre-cropped) above grey steps and colour patches. */
     private fun panel(photo: Bitmap?, w: Int, h: Int): Bitmap {
         val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

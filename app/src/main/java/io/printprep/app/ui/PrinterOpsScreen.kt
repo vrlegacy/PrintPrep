@@ -74,6 +74,9 @@ fun PrinterOpsScreen(vm: JobViewModel) {
                     OutlinedButton(onClick = { ctl.clearStuckJob() }, enabled = !ctl.busy, modifier = Modifier.fillMaxWidth()) {
                         Text("Clear a stuck job (stop & reset)")
                     }
+                    OutlinedButton(onClick = { vm.selectTab(io.printprep.app.Screen.Settings) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Wrong colours? Driver & colour tests →")
+                    }
                     OpStatus(ctl.ui)
                 }
             }

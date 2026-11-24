@@ -8,6 +8,8 @@ import android.graphics.ColorMatrixColorFilter
 import io.printprep.app.data.ImageStore
 import io.printprep.app.engine.Sheet
 import io.printprep.app.engine.SheetRenderer
+import io.printprep.app.model.CanonDriver
+import io.printprep.app.model.ColorCorrect
 import io.printprep.app.model.JobItem
 import io.printprep.app.model.PrintSettings
 import io.printprep.app.model.PrintTone
@@ -60,11 +62,13 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
         rotate180: Boolean,
         onProgress: (PrintProgress) -> Unit,
         isCancelled: () -> Boolean,
+        driver: String = CanonDriver.saved(context).id,
+        correction: ColorCorrect = ColorCorrect.saved(context),
     ): JobReport = withContext(Dispatchers.IO) {
-        Gutenprint.ensureReady(context)?.let { throw IOException(it) }
+        Gutenprint.ensureReady(context, driver)?.let { throw IOException(it) }
         if (printer.state !is PrinterState.Ready) throw IOException("The printer isn't ready. Plug it in, switch it on and allow USB access.")
-        val options = DriverSettings.options(s)
-        val area = Gutenprint.imageableArea(Gutenprint.G2010_DRIVER, options)
+        val options = DriverSettings.options(s, correction)
+        val area = Gutenprint.imageableArea(driver, options)
             ?: throw IOException("The printer driver couldn't work out the page size.")
         val pageWpt = area[0]; val pageHpt = area[1]
         val leftPt = area[2]; val rightPt = area[3]; val topPt = area[4]; val bottomPt = area[5]
@@ -97,7 +101,7 @@ class PrintJobRunner(private val context: Context, private val store: ImageStore
             }
             val file = File(context.cacheDir, "print_page_${i + 1}.prn")
             try {
-                val err = Gutenprint.printPage(Gutenprint.G2010_DRIVER, options, wPx, hPx, leftPt, topPt, areaWpt, areaHpt, source, file)
+                val err = Gutenprint.printPage(driver, options, wPx, hPx, leftPt, topPt, areaWpt, areaHpt, source, file)
                 if (err == "cancelled" || isCancelled()) throw PrintCancelled()
                 if (err != null) throw IOException(err)
             } finally {

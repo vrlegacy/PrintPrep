@@ -9,13 +9,17 @@ import io.printprep.app.data.ImageStore
 import io.printprep.app.engine.LayoutEngine
 import io.printprep.app.engine.PrintPlan
 import io.printprep.app.engine.Sheet
+import io.printprep.app.model.CanonDriver
+import io.printprep.app.model.ColorCorrect
 import io.printprep.app.model.ColorMode
 import io.printprep.app.model.Duplex
 import io.printprep.app.model.FitMode
 import io.printprep.app.model.ItemKind
 import io.printprep.app.model.JobItem
 import io.printprep.app.model.MarginPreset
+import io.printprep.app.model.PaperType
 import io.printprep.app.model.PrintSettings
+import io.printprep.app.model.PrintTone
 import io.printprep.app.model.Quality
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -218,6 +222,91 @@ class PrintController private constructor(private val app: Application, private 
                 lastPageFirst = false, toneOverride = io.printprep.app.model.PrintTone.A,
             )
             print(LayoutEngine.plan(listOf(item), s), s)
+        }
+    }
+
+    private data class CalCombo(val title: String, val subtitle: String, val driver: String, val correction: ColorCorrect)
+
+    /**
+     * Prints one labelled reference page per candidate driver (same picture and a colour chart),
+     * so the user can compare and choose the driver whose colour is truest (see [CanonDriver]).
+     */
+    fun printDriverTest(photo: JobItem?, quality: Quality, paperType: PaperType) {
+        val combos = CanonDriver.entries.map { d -> CalCombo("Driver: ${d.label}", d.note, d.id, ColorCorrect.DEFAULT) }
+        printCalibration("Driver test", photo, quality, paperType, combos)
+    }
+
+    /**
+     * Prints one labelled reference page per colour-correction mode, all on the currently-selected
+     * driver, so the user can pick the mode that fixes the hues (see [ColorCorrect]).
+     */
+    fun printCorrectionTest(photo: JobItem?, quality: Quality, paperType: PaperType) {
+        val driver = CanonDriver.saved(app)
+        val combos = ColorCorrect.entries.map { cc -> CalCombo("Colour: ${cc.label}", "Driver: ${driver.label}", driver.id, cc) }
+        printCalibration("Colour test", photo, quality, paperType, combos)
+    }
+
+    /**
+     * Prints each [combos] entry as its own one-page job with that entry's driver and correction.
+     * Entries are printed independently: if one driver/mode is rejected, the rest still print and
+     * the skipped ones are listed in the done message.
+     */
+    private fun printCalibration(baseLabel: String, photo: JobItem?, quality: Quality, paperType: PaperType, combos: List<CalCombo>) {
+        if (busy || combos.isEmpty()) return
+        cancelFlag.set(false)
+        ui = PrintUi.Running(baseLabel, 0, combos.size, "Preparing", 0f)
+        PrintService.start(app)
+        scope.launch {
+            try {
+                val items = withContext(Dispatchers.Default) {
+                    val pic = photo?.let { runCatching { store.decode(it, 900, useCache = false) }.getOrNull() }
+                    val list = combos.map { combo ->
+                        val bmp = TestPages.calibrationPage(pic, combo.title, combo.subtitle)
+                        store.saveBitmapItem(bmp, combo.title, ItemKind.WEB_PAGE).also { bmp.recycle() }
+                    }
+                    pic?.recycle()
+                    list
+                }
+                var ok = 0
+                val fails = mutableListOf<String>()
+                for ((i, combo) in combos.withIndex()) {
+                    if (cancelFlag.get()) break
+                    val s = PrintSettings(
+                        margin = MarginPreset.DEFAULT, quality = quality, paperType = paperType,
+                        lastPageFirst = false, toneOverride = PrintTone.A,
+                    )
+                    val plan = LayoutEngine.plan(listOf(items[i]), s)
+                    try {
+                        lastReport = runner.printSheets(
+                            plan.sheets, s, rotate180 = false,
+                            onProgress = { p ->
+                                ui = PrintUi.Running("$baseLabel ${i + 1}/${combos.size}: ${combo.title}", p.page, p.total, p.stage, p.fraction, p.notice, p.printed)
+                            },
+                            isCancelled = { cancelFlag.get() },
+                            driver = combo.driver, correction = combo.correction,
+                        )
+                        ok++
+                    } catch (e: PrintCancelled) {
+                        throw e
+                    } catch (e: Throwable) {
+                        fails.add("${combo.title} — ${e.message ?: "failed"}")
+                    }
+                }
+                printer.refresh()
+                ui = if (cancelFlag.get()) {
+                    PrintUi.Failed("Calibration cancelled after $ok page(s).")
+                } else {
+                    val msg = StringBuilder("Printed $ok of ${combos.size} page(s). Compare them, then pick the best in Settings.")
+                    if (fails.isNotEmpty()) msg.append(" Skipped: ").append(fails.joinToString("; "))
+                    PrintUi.Done(msg.toString())
+                }
+            } catch (e: PrintCancelled) {
+                clearPrinter()
+                ui = PrintUi.Failed("Calibration cancelled.")
+            } catch (e: Throwable) {
+                clearPrinter()
+                ui = PrintUi.Failed(e.message ?: "Calibration failed.")
+            }
         }
     }
 

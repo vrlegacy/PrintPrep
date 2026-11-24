@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import io.printprep.app.JobViewModel
 import io.printprep.app.print.PrintUi
 import io.printprep.app.print.PrinterState
+import io.printprep.app.model.CanonDriver
+import io.printprep.app.model.ColorCorrect
 import io.printprep.app.model.ItemKind
 import io.printprep.app.model.PrintTone
 import androidx.compose.runtime.mutableStateOf
@@ -61,10 +63,75 @@ fun SettingsScreen(vm: JobViewModel) {
                     Hint("Update opens the new version in your browser; tap the finished download to install it.")
                 }
             }
-            Text("Print colour", style = MaterialTheme.typography.titleMedium)
+            Text("Printer driver & colour", style = MaterialTheme.typography.titleMedium)
+            DriverColourCard(vm)
+            Text("Print tone", style = MaterialTheme.typography.titleMedium)
             PrintColourCard(vm)
             Hint("Printer status, nozzle check, cleaning and diagnostics are on the Printer tab.")
         }
+    }
+}
+
+/**
+ * Picks the Canon driver and colour-correction mode, and prints the two comparison sheets used to
+ * choose them. Fixing wrong hues usually lives here, not in the tone card below.
+ */
+@Composable
+private fun DriverColourCard(vm: JobViewModel) {
+    val context = LocalContext.current
+    val ctl = vm.print
+    var driver by remember { mutableStateOf(CanonDriver.saved(context)) }
+    var correct by remember { mutableStateOf(ColorCorrect.saved(context)) }
+    val ready = ctl.printer.state is PrinterState.Ready && !ctl.busy
+    val photo = vm.items.firstOrNull { it.kind == ItemKind.IMAGE }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                "If colours print with the wrong tint, try a different Canon driver and colour-correction mode. " +
+                    "Print the two test sheets, compare each page with your phone, and keep what looks right.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            ChoiceChips("Canon driver", CanonDriver.entries, driver, { it.label }, enabled = !ctl.busy) { d ->
+                driver = d
+                CanonDriver.save(context, d)
+            }
+            Text(driver.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            ChoiceChips("Colour correction", ColorCorrect.entries, correct, { it.label }, enabled = !ctl.busy) { c ->
+                correct = c
+                ColorCorrect.save(context, c)
+            }
+            Button(
+                onClick = { ctl.printDriverTest(photo, vm.settings.quality, vm.settings.paperType) },
+                enabled = ready,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Print driver test (${CanonDriver.entries.size} pages)") }
+            OutlinedButton(
+                onClick = { ctl.printCorrectionTest(photo, vm.settings.quality, vm.settings.paperType) },
+                enabled = ready,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Print colour-correction test (${ColorCorrect.entries.size} pages)") }
+            Hint(
+                "Each sheet prints the first photo in your current job (or a built-in chart) once per option, " +
+                    "labelled, on your current paper and quality. The colour test uses the driver selected above.",
+            )
+            PrintStatus(ctl)
+        }
+    }
+}
+
+/** Shared print progress / result row for the Settings cards. */
+@Composable
+private fun PrintStatus(ctl: io.printprep.app.print.PrintController) {
+    when (val ui = ctl.ui) {
+        is PrintUi.Running -> {
+            Text("${ui.label}: ${ui.stage} ${(ui.fraction * 100).toInt()}%")
+            ui.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            LinearProgressIndicator(progress = { ui.fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = { ctl.cancel() }) { Text("Cancel") }
+        }
+        is PrintUi.Done -> Text(ui.message, color = MaterialTheme.colorScheme.primary)
+        is PrintUi.Failed -> Text(ui.message, color = MaterialTheme.colorScheme.error)
+        else -> {}
     }
 }
 
@@ -105,17 +172,7 @@ private fun PrintColourCard(vm: JobViewModel) {
                 "Uses the first photo in your current job (or a built-in chart) and your current paper and quality, " +
                     "so print it with the settings you normally use. Only printing changes: previews, PDFs and saved images stay exactly as they are.",
             )
-            when (val ui = ctl.ui) {
-                is PrintUi.Running -> {
-                    Text("${ui.label}: ${ui.stage} ${(ui.fraction * 100).toInt()}%")
-                    ui.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    LinearProgressIndicator(progress = { ui.fraction.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                    OutlinedButton(onClick = { ctl.cancel() }) { Text("Cancel") }
-                }
-                is PrintUi.Done -> Text(ui.message, color = MaterialTheme.colorScheme.primary)
-                is PrintUi.Failed -> Text(ui.message, color = MaterialTheme.colorScheme.error)
-                else -> {}
-            }
+            PrintStatus(ctl)
         }
     }
 }

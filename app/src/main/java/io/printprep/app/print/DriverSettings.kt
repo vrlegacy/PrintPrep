@@ -1,5 +1,6 @@
 package io.printprep.app.print
 
+import io.printprep.app.model.ColorCorrect
 import io.printprep.app.model.ColorMode
 import io.printprep.app.model.MarginPreset
 import io.printprep.app.model.PaperSize
@@ -13,7 +14,7 @@ import io.printprep.app.model.Quality
  */
 object DriverSettings {
 
-    fun options(s: PrintSettings): List<Pair<String, String>> {
+    fun options(s: PrintSettings, correction: ColorCorrect = ColorCorrect.DEFAULT): List<Pair<String, String>> {
         val photoPaper = s.paperType != PaperType.PLAIN
         val blackInk = s.color == ColorMode.BLACK_ONLY || s.color == ColorMode.BW_DOCUMENT
         val media = when (s.paperType) {
@@ -41,6 +42,8 @@ object DriverSettings {
             add("Resolution" to resolution)
             add("PrintingMode" to if (blackInk) "BW" else "Color")
             add("InkType" to if (blackInk) "Gray" else "CMYK")
+            // How the driver maps our RGB onto its inks. Only meaningful for colour output.
+            if (!blackInk) add("ColorCorrection" to correction.id)
             add("InputImageType" to "RGB")
             add("ChannelBitDepth" to "8")
             add("JobMode" to "Job") // one job per page, framed by stp_start_job / stp_end_job (see gp_jni.c)
