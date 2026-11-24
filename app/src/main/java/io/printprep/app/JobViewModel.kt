@@ -170,12 +170,6 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     /** Set when a specific URL must load into the live session (a shared link), rather than resuming it. */
     var webForceLoadUrl by mutableStateOf<String?>(null)
 
-    override fun onCleared() {
-        webSession?.dispose()
-        webSession = null
-        super.onCleared()
-    }
-
     /** The part of the page currently on screen, as one image. Main thread. */
     fun captureVisible(web: WebView, title: String) {
         if (web.width <= 0 || web.height <= 0) return
@@ -396,6 +390,8 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         // The print controller outlives this screen on purpose: a running job carries on in the background.
+        webSession?.dispose()
+        webSession = null
         super.onCleared()
     }
 
