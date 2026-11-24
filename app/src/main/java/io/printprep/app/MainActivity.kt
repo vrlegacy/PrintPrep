@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
                     val text = intent.getStringExtra(Intent.EXTRA_TEXT)
                     val url = text?.let { URL_REGEX.find(it)?.value }
                     if (url != null) {
-                        vm.openWeb(url)
+                        vm.openWeb(url, forceLoad = true)
                         return
                     }
                 }

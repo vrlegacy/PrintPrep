@@ -157,6 +157,25 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
     var webBusy by mutableStateOf(false)
         private set
 
+    /**
+     * The one live browser session. Held here (not in the screen) so it survives leaving the browser
+     * for the editor/Home and coming back, with no reload. Created lazily by the web screen.
+     */
+    private var webSession: io.printprep.app.ui.WebSession? = null
+
+    /** Lazily creates, then reuses, the single live browser session. */
+    fun ensureWebSession(context: android.content.Context): io.printprep.app.ui.WebSession =
+        webSession ?: io.printprep.app.ui.WebSession(context, this).also { webSession = it }
+
+    /** Set when a specific URL must load into the live session (a shared link), rather than resuming it. */
+    var webForceLoadUrl by mutableStateOf<String?>(null)
+
+    override fun onCleared() {
+        webSession?.dispose()
+        webSession = null
+        super.onCleared()
+    }
+
     /** The part of the page currently on screen, as one image. Main thread. */
     fun captureVisible(web: WebView, title: String) {
         if (web.width <= 0 || web.height <= 0) return
@@ -216,7 +235,13 @@ class JobViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun openWeb(url: String) {
+    /**
+     * Opens the in-app browser. By default it resumes the live session if one exists (reopening a
+     * launcher keeps you where you were); [forceLoad] makes it load [url] instead — used for a link
+     * shared into the app, which should go to that page.
+     */
+    fun openWeb(url: String, forceLoad: Boolean = false) {
+        if (forceLoad || webSession?.isEmpty != false) webForceLoadUrl = url
         navigateTo(Screen.Web(url))
     }
 

@@ -10,19 +10,19 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.LinearEasing
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Handler
-import android.os.Looper
-import android.os.Message
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,11 +47,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -60,7 +62,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,8 +72,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -103,35 +110,43 @@ fun toUrl(input: String): String {
 }
 
 /**
- * In-app browser. Bottom: a compact navigation bar (back, forward, home, address/search, refresh,
- * desktop site) above the capture/print bar. A thin loading line shows while pages or downloads load.
+ * In-app browser. It renders the one live [io.printprep.app.ui.WebSession] held by the view model, so
+ * leaving for the print editor and coming Back resumes the exact page with no reload. Bottom: a
+ * compact navigation bar (back, forward, home, address/search, refresh, desktop site) above the
+ * capture/print bar. A thin loading line shows while pages or downloads load.
  */
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
-    var currentUrl by remember { mutableStateOf(toUrl(startUrl)) }
-    var field by remember { mutableStateOf(TextFieldValue(toUrl(startUrl))) }
+    val context = LocalContext.current
+    val session = remember { vm.ensureWebSession(context) }
     var editing by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(true) }
-    var progress by remember { mutableStateOf(0f) }
-    var web by remember { mutableStateOf<WebView?>(null) }
-    var canGoBack by remember { mutableStateOf(false) }
-    var canGoForward by remember { mutableStateOf(false) }
-    var desktop by remember { mutableStateOf(false) }
-    var pageTitle by remember { mutableStateOf("") }
-    var pickedImage by remember { mutableStateOf<String?>(null) }
+    var field by remember { mutableStateOf(TextFieldValue("")) }
+    var showTabs by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
-    val title = pageTitle.ifBlank { Uri.parse(currentUrl).host ?: "Web page" }
+
+    // First time (empty session) load the launcher's URL; a link shared into the app forces its URL.
+    LaunchedEffect(Unit) { if (session.isEmpty && vm.webForceLoadUrl == null) session.open(startUrl) }
+    LaunchedEffect(vm.webForceLoadUrl) {
+        vm.webForceLoadUrl?.let { session.open(it); vm.webForceLoadUrl = null }
+    }
+    DisposableEffect(Unit) { onDispose { vm.webNotice = null } }
+
+    val currentUrl = session.currentUrl
+    val title = session.pageTitle.ifBlank { Uri.parse(currentUrl).host ?: "Web page" }
 
     fun go(input: String) {
-        val url = toUrl(input)
         focus.clearFocus()
-        web?.loadUrl(url)
+        session.open(input)
     }
 
-    DisposableEffect(Unit) { onDispose { vm.webNotice = null } }
-    BackHandler(enabled = editing || canGoBack) {
-        if (editing) focus.clearFocus() else web?.goBack()
+    // Back closes the tab switcher first, then dismisses editing, then walks the page/layer history;
+    // when disabled here the app's own Back handler moves to the previous screen.
+    BackHandler(enabled = showTabs || editing || session.canGoBack) {
+        when {
+            showTabs -> showTabs = false
+            editing -> focus.clearFocus()
+            else -> session.onBack()
+        }
     }
 
     Scaffold(
@@ -139,17 +154,24 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
             Surface(tonalElevation = 3.dp) {
                 Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)) {
                     // ---- title strip with a close button (the system Back key goes back inside the site)
-                    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         NavIcon(Icons.Filled.Close, "Close browser", true) { vm.back() }
                         Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        // A tab switcher appears only once the site has opened a second page in a new tab.
+                        if (session.tabCount >= 2) {
+                            TabCountButton(session.tabCount) {
+                                session.refreshActiveThumb()
+                                showTabs = true
+                            }
+                        }
                     }
                     // ---- compact navigation bar + address field
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        NavIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", canGoBack) { web?.goBack() }
-                        NavIcon(Icons.AutoMirrored.Filled.ArrowForward, "Forward", canGoForward) { web?.goForward() }
+                        NavIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", session.canGoBack) { session.onBack() }
+                        NavIcon(Icons.AutoMirrored.Filled.ArrowForward, "Forward", session.canGoForward) { session.goForward() }
                         NavIcon(Icons.Filled.Home, "Home (land records)", true) { go(WebShortcuts.KARNATAKA_LAND_RECORDS) }
                         AddressField(
                             value = if (editing) field else TextFieldValue(Uri.parse(currentUrl).host ?: currentUrl),
@@ -167,20 +189,19 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                         if (editing) {
                             NavIcon(Icons.Filled.Close, "Cancel", true) { focus.clearFocus() }
                         } else {
-                            NavIcon(Icons.Filled.Refresh, "Reload", web != null) { web?.reload() }
-                            NavIcon(DesktopIcon, if (desktop) "Phone site" else "Desktop site", true, selected = desktop) {
-                                desktop = !desktop
-                                web?.let { setDesktop(it, desktop); it.reload() }
+                            NavIcon(Icons.Filled.Refresh, "Reload", session.active != null) { session.reload() }
+                            NavIcon(DesktopIcon, if (session.desktop) "Phone site" else "Desktop site", true, selected = session.desktop) {
+                                session.toggleDesktop()
                             }
                         }
                     }
                     // ---- loading line (page or download)
                     Box(Modifier.fillMaxWidth().height(3.dp)) {
                         when {
-                            vm.webBusy || (loading && progress < 0.05f) ->
+                            vm.webBusy || (session.loading && session.progress < 0.05f) ->
                                 LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp))
-                            loading ->
-                                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(3.dp))
+                            session.loading ->
+                                LinearProgressIndicator(progress = { session.progress }, modifier = Modifier.fillMaxWidth().height(3.dp))
                         }
                     }
                 }
@@ -196,15 +217,16 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                         vm.webNotice?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 4.dp))
                         }
+                        val canCapture = session.active != null && !session.loading
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
-                                onClick = { web?.let { vm.captureVisible(it, title) } },
-                                enabled = web != null && !loading,
+                                onClick = { session.active?.let { vm.captureVisible(it, title) } },
+                                enabled = canCapture,
                                 modifier = Modifier.weight(1f).height(44.dp),
                             ) { Text("Capture screen", maxLines = 1) }
                             OutlinedButton(
-                                onClick = { web?.let { vm.captureWebPage(it, title) } },
-                                enabled = web != null && !loading,
+                                onClick = { session.active?.let { vm.captureWebPage(it, title) } },
+                                enabled = canCapture,
                                 modifier = Modifier.weight(1f).height(44.dp),
                             ) { Text("Full page", maxLines = 1) }
                             Button(
@@ -219,107 +241,52 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
         },
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
-                AndroidView(
-                    factory = { ctx ->
-                        WebView(ctx).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.loadWithOverviewMode = true
-                            settings.useWideViewPort = true
-                            settings.builtInZoomControls = true
-                            settings.displayZoomControls = false
-                            settings.setSupportMultipleWindows(false)
-                            settings.cacheMode = WebSettings.LOAD_DEFAULT
-                            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                    loading = true
-                                    progress = 0f
-                                    if (url != null) currentUrl = url
-                                }
-
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    loading = false
-                                    if (url != null) currentUrl = url
-                                    pageTitle = view?.title.orEmpty()
-                                    // On the Google Images / web home page, put the cursor in the search box.
-                                    if (url != null && url.contains("google.") && (url.contains("imghp") || url.contains("webhp"))) {
-                                        view?.requestFocus()
-                                        view?.evaluateJavascript(
-                                            "(function(){var e=document.querySelector('textarea[name=q],input[name=q]');" +
-                                                "if(e){e.focus();e.click();}})();",
-                                            null,
-                                        )
-                                    }
-                                }
-
-                                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                                    canGoBack = view?.canGoBack() == true
-                                    canGoForward = view?.canGoForward() == true
-                                    if (url != null) currentUrl = url
-                                }
-
-                                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
-                            }
-                            webChromeClient = object : android.webkit.WebChromeClient() {
-                                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                    progress = newProgress / 100f
-                                    if (newProgress >= 100) loading = false
-                                }
-
-                                override fun onReceivedTitle(view: WebView?, t: String?) {
-                                    pageTitle = t.orEmpty()
-                                }
-                            }
-                            // Files the site downloads (e.g. an RTC as PDF or image) go straight into the print job.
-                            setDownloadListener { url, userAgent, _, _, _ ->
-                                vm.fetchFromWeb(url, userAgent, this.url, toGallery = false)
-                            }
-                            // Long-press on an image: ask what to do with it.
-                            setOnLongClickListener {
-                                val hit = hitTestResult
-                                when (hit.type) {
-                                    WebView.HitTestResult.IMAGE_TYPE -> {
-                                        pickedImage = hit.extra
-                                        true
-                                    }
-                                    WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
-                                        val msg = Handler(Looper.getMainLooper()) { m: Message ->
-                                            pickedImage = m.data.getString("url") ?: hit.extra
-                                            true
-                                        }.obtainMessage()
-                                        requestImageRef(msg)
-                                        true
-                                    }
-                                    else -> false
-                                }
-                            }
-                            loadUrl(toUrl(startUrl))
-                            web = this
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                // Our own loader: a simple ring in the middle over a 70% veil while the page loads.
-                if (loading || vm.webBusy) PageLoader(if (loading && progress >= 0.05f) progress else null)
+            // Show the layer on top of the session. key() swaps the view when a new-window layer is
+            // pushed or closed; the retained WebView is detached from any old parent before re-attaching.
+            val active = session.active
+            if (active != null) {
+                key(active) {
+                    AndroidView(
+                        factory = {
+                            (active.parent as? android.view.ViewGroup)?.removeView(active)
+                            active
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
+            // Our own loader: a simple ring in the middle over a 70% veil while the page loads.
+            if (session.loading || vm.webBusy) PageLoader(if (session.loading && session.progress >= 0.05f) session.progress else null)
+        }
     }
 
-    pickedImage?.let { url ->
-        val wv = web
+    if (showTabs) {
+        TabSwitcher(
+            session = session,
+            onDismiss = { showTabs = false },
+            onPick = { session.switchTo(it); showTabs = false },
+            onClose = {
+                session.closeTab(it)
+                if (session.tabCount < 2) showTabs = false
+            },
+        )
+    }
+
+    session.pickedImage?.let { url ->
+        val wv: WebView? = session.active
         AlertDialog(
-            onDismissRequest = { pickedImage = null },
+            onDismissRequest = { session.pickedImage = null },
             title = { Text("Image") },
             text = { Text("Add this image to your print job, or save it to the gallery?") },
             confirmButton = {
                 TextButton(onClick = {
-                    pickedImage = null
+                    session.pickedImage = null
                     vm.fetchFromWeb(url, wv?.settings?.userAgentString, wv?.url, toGallery = false)
                 }) { Text("Add to print") }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    pickedImage = null
+                    session.pickedImage = null
                     vm.fetchFromWeb(url, wv?.settings?.userAgentString, wv?.url, toGallery = true)
                 }) { Text("Save to gallery") }
             },
@@ -335,6 +302,102 @@ private fun NavIcon(icon: ImageVector, label: String, enabled: Boolean, selected
         modifier = Modifier.size(40.dp),
         colors = if (selected) IconButtonDefaults.filledTonalIconButtonColors() else IconButtonDefaults.iconButtonColors(),
     ) { Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp)) }
+}
+
+/** A small square in the top bar showing how many tabs are open; tapping it opens the switcher. */
+@Composable
+private fun TabCountButton(count: Int, onClick: () -> Unit) {
+    val tint = LocalContentColor.current
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        Box(
+            Modifier.size(22.dp).border(1.5.dp, tint, RoundedCornerShape(5.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (count > 9) "9+" else "$count", style = MaterialTheme.typography.labelMedium, color = tint)
+        }
+    }
+}
+
+/** Full-screen overlay: a grid of thumbnail snapshots of the open tabs. Tap to switch, × to close. */
+@Composable
+private fun TabSwitcher(
+    session: WebSession,
+    onDismiss: () -> Unit,
+    onPick: (WebView) -> Unit,
+    onClose: (WebView) -> Unit,
+) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Tabs (${session.tabCount})", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) { Text("Done") }
+            }
+            Spacer(Modifier.height(8.dp))
+            val tabs = session.layers.toList()
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(tabs) { wv ->
+                    TabCard(
+                        title = wv.title?.takeIf { it.isNotBlank() } ?: (wv.url ?: "Tab"),
+                        thumb = session.thumbnails[wv],
+                        current = wv === session.active,
+                        onPick = { onPick(wv) },
+                        onClose = { onClose(wv) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** One tab in the switcher: its snapshot (or a blank panel), a close button, and the page title. */
+@Composable
+private fun TabCard(
+    title: String,
+    thumb: android.graphics.Bitmap?,
+    current: Boolean,
+    onPick: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onPick() },
+        border = if (current) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+    ) {
+        Column {
+            Box(Modifier.fillMaxWidth().height(150.dp)) {
+                if (thumb != null) {
+                    Image(
+                        bitmap = thumb.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+                }
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(30.dp)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f), RoundedCornerShape(15.dp)),
+                ) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close tab", modifier = Modifier.size(18.dp))
+                }
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
 }
 
 /**
@@ -434,7 +497,7 @@ private val DesktopIcon: ImageVector by lazy {
 }
 
 /** Switches the site between phone and desktop layout (some government sites only work well in desktop mode). */
-private fun setDesktop(w: WebView, on: Boolean) {
+fun setDesktop(w: WebView, on: Boolean) {
     val s = w.settings
     s.userAgentString = if (on) {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
