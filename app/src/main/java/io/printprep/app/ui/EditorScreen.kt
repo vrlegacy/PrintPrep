@@ -2,6 +2,7 @@ package io.printprep.app.ui
 
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -75,6 +76,7 @@ import io.printprep.app.model.ColorMode
 import io.printprep.app.model.Duplex
 import io.printprep.app.model.FitMode
 import io.printprep.app.model.FixedSizePreset
+import io.printprep.app.model.ItemKind
 import io.printprep.app.model.JobItem
 import io.printprep.app.model.MarginPreset
 import io.printprep.app.model.PageOrientation
@@ -100,6 +102,15 @@ fun EditorScreen(vm: JobViewModel) {
     var showOutput by remember { mutableStateOf(false) }
     var showPrint by remember { mutableStateOf(false) }
     val addFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.import(it) }
+    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { vm.import(it) }
+    // Add more media: an all-image job opens the photos app; anything with a PDF uses the file picker.
+    val addMore = {
+        if (items.isNotEmpty() && items.all { it.kind == ItemKind.IMAGE }) {
+            photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        } else {
+            addFiles.launch(arrayOf("image/*", "image/webp", "application/pdf"))
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -112,11 +123,6 @@ fun EditorScreen(vm: JobViewModel) {
                 },
                 navigationIcon = {
                     IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    IconButton(onClick = { addFiles.launch(arrayOf("image/*", "image/webp", "application/pdf")) }) {
-                        Icon(Icons.Filled.Add, "Add photos or PDFs")
-                    }
                 },
             )
         },
@@ -146,8 +152,7 @@ fun EditorScreen(vm: JobViewModel) {
         Column(Modifier.padding(pad).fillMaxSize()) {
             if (vm.importing) LinearProgressIndicator(Modifier.fillMaxWidth())
             SheetPager(vm, plan, Modifier.weight(0.42f).fillMaxWidth())
-            if (plan.sheets.isNotEmpty()) PreviewControls(vm, s)
-            ItemStrip(vm, items) { addFiles.launch(arrayOf("image/*", "image/webp", "application/pdf")) }
+            ItemStrip(vm, items) { addMore() }
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
                 TABS.forEachIndexed { i, t -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t) }) }
             }

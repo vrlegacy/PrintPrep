@@ -11,32 +11,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.printprep.app.JobViewModel
@@ -50,7 +41,6 @@ fun HomeScreen(vm: JobViewModel) {
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         vm.import(uris)
     }
-    var askWeb by remember { mutableStateOf(false) }
 
     Scaffold(bottomBar = { AppBottomNav(vm) }) { pad ->
         Column(
@@ -72,17 +62,30 @@ fun HomeScreen(vm: JobViewModel) {
             Spacer(Modifier.height(8.dp))
 
             if (vm.items.isNotEmpty()) {
-                Button(onClick = { vm.goToEditor() }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Text("Continue current job (${vm.items.size} items)")
-                }
-                OutlinedButton(onClick = { vm.newJob() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Start a new job")
-                }
+                Button(
+                    onClick = { vm.newJob() },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32), contentColor = Color.White),
+                ) { Text("Start a new job") }
+                OutlinedButton(
+                    onClick = { vm.goToEditor() },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.White,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                ) { Text("Continue current job (${vm.items.size} items)") }
             }
-            HomeAction("Pick photos", R.drawable.ic_photo, Color(0xFF2E7D6B)) {
+            HomeAction(
+                "Pick photos", R.drawable.ic_photo,
+                MaterialTheme.colorScheme.surfaceVariant, content = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
                 photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
-            HomeAction("Pick PDFs or files", R.drawable.ic_file, Color(0xFF3F51B5)) {
+            HomeAction(
+                "Pick PDFs or files", R.drawable.ic_file,
+                MaterialTheme.colorScheme.surfaceVariant, content = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
                 files.launch(arrayOf("application/pdf", "image/*", "image/webp"))
             }
             HomeAction("ಪಹಣಿ RTC", R.drawable.ic_pahani, Color(0xFFF3EDE4), content = Color(0xFF3A2E1E), tint = false) {
@@ -91,19 +94,12 @@ fun HomeScreen(vm: JobViewModel) {
             HomeAction("Image search", R.drawable.ic_search, Color(0xFF7B4FA3)) {
                 vm.openWeb(WebShortcuts.GOOGLE_IMAGES)
             }
-            HomeAction("Web search", R.drawable.ic_public, Color(0xFF1565C0)) { askWeb = true }
+            HomeAction("Web search", R.drawable.ic_public, Color(0xFF1565C0)) {
+                vm.openWeb(WebShortcuts.GOOGLE)
+            }
 
             PrinterStatusCard(vm)
         }
-    }
-
-    if (askWeb) SearchDialog(
-        title = "Web search",
-        label = "Search Google or paste a URL",
-        onDismiss = { askWeb = false },
-    ) { query ->
-        askWeb = false
-        vm.openWeb(toUrl(query))
     }
 }
 
@@ -136,23 +132,3 @@ private fun HomeAction(
     }
 }
 
-@Composable
-private fun SearchDialog(title: String, label: String, onDismiss: () -> Unit, onSearch: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                label = { Text(label) },
-                placeholder = { Text("What are you looking for?") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            )
-        },
-        confirmButton = { TextButton(onClick = { onSearch(text.trim()) }, enabled = text.isNotBlank()) { Text("Search") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}

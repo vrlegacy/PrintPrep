@@ -30,9 +30,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -88,6 +87,9 @@ object WebShortcuts {
 
     /** Image search opens Google Images; its search box is auto-focused on load. */
     const val GOOGLE_IMAGES = "https://www.google.com/imghp?hl=en&authuser=0&ogbl"
+
+    /** Web search opens the Google home page; its search box is auto-focused on load. */
+    const val GOOGLE = "https://www.google.com/webhp?hl=en&authuser=0&ogbl"
 }
 
 /** Turns what was typed into an address: a URL stays a URL, anything else becomes a web search. */
@@ -133,21 +135,15 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
     }
 
     Scaffold(
-        bottomBar = {
+        topBar = {
             Surface(tonalElevation = 3.dp) {
-                // Sits above the keyboard when it's open (the page area shrinks to make room),
-                // and above the system navigation bar otherwise.
-                Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))) {
-                    // ---- loading line (page or download)
-                    Box(Modifier.fillMaxWidth().height(3.dp)) {
-                        when {
-                            vm.webBusy || (loading && progress < 0.05f) ->
-                                LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp))
-                            loading ->
-                                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(3.dp))
-                        }
+                Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)) {
+                    // ---- title strip with a close button (the system Back key goes back inside the site)
+                    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        NavIcon(Icons.Filled.Close, "Close browser", true) { vm.back() }
+                        Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     }
-                    // ---- compact navigation bar
+                    // ---- compact navigation bar + address field
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -164,6 +160,8 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                                 if (focused) field = TextFieldValue(currentUrl, TextRange(0, currentUrl.length))
                             },
                             onGo = { go(field.text) },
+                            editing = editing,
+                            onClear = { field = TextFieldValue("") },
                             modifier = Modifier.weight(1f),
                         )
                         if (editing) {
@@ -176,6 +174,22 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                             }
                         }
                     }
+                    // ---- loading line (page or download)
+                    Box(Modifier.fillMaxWidth().height(3.dp)) {
+                        when {
+                            vm.webBusy || (loading && progress < 0.05f) ->
+                                LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp))
+                            loading ->
+                                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(3.dp))
+                        }
+                    }
+                }
+            }
+        },
+        bottomBar = {
+            Surface(tonalElevation = 3.dp) {
+                // Above the system navigation bar; the keyboard (for the address field at the top) covers this.
+                Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars)) {
                     HorizontalDivider()
                     // ---- capture / print bar
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -204,13 +218,7 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
             }
         },
     ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize()) {
-            // slim title strip with a close button (the system Back key goes back inside the site)
-            Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                NavIcon(Icons.Filled.Close, "Close browser", true) { vm.back() }
-                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.padding(pad).fillMaxSize()) {
                 AndroidView(
                     factory = { ctx ->
                         WebView(ctx).apply {
@@ -234,8 +242,8 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                                     loading = false
                                     if (url != null) currentUrl = url
                                     pageTitle = view?.title.orEmpty()
-                                    // On the Google Images home page, put the cursor in the search box.
-                                    if (url != null && url.contains("google.") && url.contains("imghp")) {
+                                    // On the Google Images / web home page, put the cursor in the search box.
+                                    if (url != null && url.contains("google.") && (url.contains("imghp") || url.contains("webhp"))) {
                                         view?.requestFocus()
                                         view?.evaluateJavascript(
                                             "(function(){var e=document.querySelector('textarea[name=q],input[name=q]');" +
@@ -295,7 +303,6 @@ fun WebCaptureScreen(vm: JobViewModel, startUrl: String) {
                 // Our own loader: a simple ring in the middle over a 70% veil while the page loads.
                 if (loading || vm.webBusy) PageLoader(if (loading && progress >= 0.05f) progress else null)
             }
-        }
     }
 
     pickedImage?.let { url ->
@@ -371,6 +378,8 @@ private fun AddressField(
     onValueChange: (TextFieldValue) -> Unit,
     onFocus: (Boolean) -> Unit,
     onGo: () -> Unit,
+    editing: Boolean,
+    onClear: () -> Unit,
     modifier: Modifier,
 ) {
     BasicTextField(
@@ -386,17 +395,25 @@ private fun AddressField(
             .height(36.dp)
             .onFocusChanged { onFocus(it.isFocused) },
         decorationBox = { inner ->
-            Box(
+            Row(
                 Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(18.dp))
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.CenterStart,
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (value.text.isEmpty()) {
-                    Text("Search or type address", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (value.text.isEmpty()) {
+                        Text("Search or type address", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    inner()
                 }
-                inner()
+                // Clear button while editing: wipes the field so you can type a fresh address.
+                if (editing && value.text.isNotEmpty()) {
+                    IconButton(onClick = onClear, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                    }
+                }
             }
         },
     )
