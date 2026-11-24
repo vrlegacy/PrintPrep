@@ -361,9 +361,13 @@ class PrintController private constructor(private val app: Application, private 
         PrintService.start(app)
         scope.launch {
             try {
-                val report = runner.printSheets(sheets, s, rotate, { p ->
-                    ui = PrintUi.Running(label, p.page, p.total, p.stage, p.fraction, p.notice, p.printed)
-                }) { cancelFlag.get() }
+                val report = runner.printSheets(
+                    sheets, s, rotate,
+                    onProgress = { p ->
+                        ui = PrintUi.Running(label, p.page, p.total, p.stage, p.fraction, p.notice, p.printed)
+                    },
+                    isCancelled = { cancelFlag.get() },
+                )
                 lastReport = report
                 printer.refresh()
                 onDone(report)
